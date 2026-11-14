@@ -59,7 +59,7 @@ function sendRawHttp<T = unknown>(
           resolve({
             status: res.statusCode ?? 0,
             headers: res.headers,
-            data: JSON.parse(text) as T,
+            data: (text.length > 0 ? JSON.parse(text) : undefined) as T,
           });
         });
       },
@@ -117,9 +117,35 @@ describe('GAW API Integration Tests', () => {
     expect(res.status).toBe(200);
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.data.status).toBe('ok');
     expect(res.data.dailyMinWagePhp).toBe(508);
     expect(res.data.hourlyMinWagePhp).toBe(63.5);
+
+    const preflight = await requestJson<undefined>(
+      client.server,
+      'OPTIONS',
+      '/api/v1/health',
+    );
+    expect(preflight.status).toBe(204);
+
+    const seeded = await requestJson<{
+      status: string;
+      usersSeeded: number;
+      gigsSeeded: number;
+    }>(client.server, 'POST', '/api/v1/marketplace/seed');
+    expect(seeded.status).toBe(200);
+    expect(seeded.data.status).toBe('seeded');
+    expect(seeded.data.usersSeeded).toBeGreaterThan(0);
+    expect(seeded.data.gigsSeeded).toBeGreaterThan(0);
+
+    const nearbySeeded = await requestJson<{ count: number }>(
+      client.server,
+      'GET',
+      '/api/v1/gigs/nearby?lat=7.0707&lng=125.6087&radiusKm=20',
+    );
+    expect(nearbySeeded.status).toBe(200);
+    expect(nearbySeeded.data.count).toBe(seeded.data.gigsSeeded);
   });
 
   it('manages user registration, boundaries, profile quotas, and tier upgrades', async () => {

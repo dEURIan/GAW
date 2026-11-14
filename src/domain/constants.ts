@@ -20,7 +20,12 @@ export const DAVAO_BOUNDS = {
 } as const;
 
 export const GIG_CATEGORIES = [
+  'plumbing',
+  'electrical',
+  'carpentry',
   'cleaning',
+  'painting',
+  'handyman',
   'delivery',
   'construction',
   'tutoring',
@@ -39,7 +44,12 @@ export type GigStatus = 'OPEN' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
 export type ApplicationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
 export const CATEGORY_HOURLY_MULTIPLIERS: Record<GigCategory, number> = {
+  plumbing: 1.45,
+  electrical: 1.5,
+  carpentry: 1.4,
   cleaning: 1.15,
+  painting: 1.3,
+  handyman: 1.25,
   errands: 1.1,
   agri_harvest: 1.1,
   delivery: 1.2,

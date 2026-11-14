@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { z } from 'zod';
 import { createDatabase } from '../db/database.js';
 import { GawRepository } from '../db/repository.js';
+import { seedDemoMarketplace } from '../db/seed.js';
 import {
   DAVAO_DAILY_MIN_WAGE_PHP,
   DAVAO_HOURLY_MIN_WAGE_PHP,
@@ -92,9 +93,19 @@ export function createApp(
   const app = express();
   const repo = new GawRepository(db);
 
-  app.use((_req, res, next) => {
+  app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET,POST,PATCH,DELETE,OPTIONS',
+    );
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
     next();
   });
   app.use(express.json({ limit: '64kb' }));
@@ -106,6 +117,11 @@ export function createApp(
       dailyMinWagePhp: DAVAO_DAILY_MIN_WAGE_PHP,
       hourlyMinWagePhp: DAVAO_HOURLY_MIN_WAGE_PHP,
     });
+  });
+
+  app.post('/api/v1/marketplace/seed', (_req, res) => {
+    const result = seedDemoMarketplace(repo);
+    res.json({ status: 'seeded', ...result });
   });
 
   app.post('/api/v1/users', (req, res) => {

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" fill="none">
+  <rect width="192" height="192" rx="44" fill="#123C39"/>
+  <circle cx="96" cy="84" r="46" fill="#0E7048"/>
+  <path d="M96 38C71.7 38 52 57.7 52 82C52 115 96 154 96 154C96 154 140 115 140 82C140 57.7 120.3 38 96 38Z" fill="#0E7048" stroke="#F4B544" stroke-width="6"/>
+  <circle cx="96" cy="82" r="18" fill="#F4B544"/>
+  <text x="96" y="176" text-anchor="middle" fill="#F7F9F5" font-family="system-ui, sans-serif" font-weight="800" font-size="22" letter-spacing="2">GAW</text>
+</svg>

@@ -26,6 +26,7 @@ export interface UserRecord {
 }
 
 export interface CreateUserInput {
+  id?: string;
   name: string;
   role: UserRole;
   tier: SubscriptionTier;
@@ -55,6 +56,7 @@ export interface GigRecord {
 }
 
 export interface CreateGigInput {
+  id?: string;
   employerId: string;
   title: string;
   description: string;
@@ -203,7 +205,7 @@ export class GawRepository {
   }
 
   createUser(input: CreateUserInput): UserRecord {
-    const id = randomUUID();
+    const id = input.id ?? randomUUID();
     const createdAt = new Date().toISOString();
 
     this.db
@@ -232,6 +234,13 @@ export class GawRepository {
       lng: input.lng,
       createdAt,
     };
+  }
+
+  countGigs(): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS count FROM gigs')
+      .get() as { count: number };
+    return row.count;
   }
 
   getUserById(id: string): UserRecord | null {
@@ -263,7 +272,7 @@ export class GawRepository {
   }
 
   createGig(input: CreateGigInput): GigRecord {
-    const id = randomUUID();
+    const id = input.id ?? randomUUID();
     const createdAt = new Date().toISOString();
 
     this.db

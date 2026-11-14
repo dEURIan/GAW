@@ -11,7 +11,12 @@
     "test:cov": "VITEST_SKIP_INSTALL_CHECKS=1 NODE_OPTIONS='--no-warnings' vitest run --coverage",
     "build": "tsc -p tsconfig.build.json",
     "perf:api": "node --no-warnings scripts/perf-check.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run test:cov && npm run build && npm run perf:api"
+    "start:api": "npm run build && node --no-warnings scripts/serve-api.mjs",
+    "dev": "npm run build && npm --prefix pixel-perfect run dev",
+    "frontend:lint": "npm --prefix pixel-perfect run lint",
+    "frontend:test": "npm --prefix pixel-perfect run test",
+    "frontend:build": "npm --prefix pixel-perfect run build",
+    "verify": "npm run lint && npm run typecheck && npm run test:cov && npm run build && npm run perf:api && npm run frontend:test && npm run frontend:build"
   },
   "dependencies": {
     "express": "4.22.3",
