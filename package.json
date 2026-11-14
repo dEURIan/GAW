@@ -1,0 +1,30 @@
+{
+  "name": "gaw-backend",
+  "version": "0.1.0",
+  "description": "GAW (Davao City Gig & Sidejob Platform) Backend Foundation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_OPTIONS='--no-warnings' vitest run",
+    "test:cov": "VITEST_SKIP_INSTALL_CHECKS=1 NODE_OPTIONS='--no-warnings' vitest run --coverage",
+    "build": "tsc -p tsconfig.build.json",
+    "perf:api": "node --no-warnings scripts/perf-check.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run test:cov && npm run build && npm run perf:api"
+  },
+  "dependencies": {
+    "express": "4.22.3",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/express": "4.17.25",
+    "@types/node": "24.13.2",
+    "@vitest/coverage-v8": "4.1.11",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "vitest": "4.1.11"
+  }
+}
