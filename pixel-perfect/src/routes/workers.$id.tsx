@@ -1,21 +1,24 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { Briefcase, Clock, MapPin, Star } from "lucide-react";
+import { Briefcase, Clock, MapPin, Pencil, Star } from "lucide-react";
 import { AppLayout, BackButton } from "@/components/gaw/AppLayout";
-import { CATEGORY_ICONS } from "@/components/gaw/categoryIcons";
+import { iconFor } from "@/components/gaw/categoryIcons";
 import { Avatar, Availability, SectionHeader } from "@/components/gaw/primitives";
 import { Button } from "@/components/ui/button";
-import { barangayName, WORKERS, type Worker } from "@/lib/gaw/data";
-import { simulatedDistance } from "@/lib/gaw/filter";
-import { formatPeso, useGaw } from "@/lib/gaw/store";
+import { BARANGAYS, barangayName, WORKERS, type Worker } from "@/lib/gaw/data";
+import { distanceKm, roundKm } from "@/lib/gaw/filter";
+import { formatPeso, hiringOrigin, useGaw } from "@/lib/gaw/store";
 
 export const Route = createFileRoute("/workers/$id")({
   loader: ({ params }) => {
+    if (params.id === "w-me") {
+      return { worker: null, isSelf: true };
+    }
     const worker = WORKERS.find((w) => w.id === params.id);
     if (!worker) throw notFound();
-    return { worker };
+    return { worker, isSelf: false };
   },
   head: ({ loaderData }) => ({
-    meta: loaderData
+    meta: loaderData?.worker
       ? [
           { title: `${loaderData.worker.name}, ${loaderData.worker.skill} — GAW` },
           { name: "description", content: loaderData.worker.bio },
@@ -25,7 +28,7 @@ export const Route = createFileRoute("/workers/$id")({
           },
           { property: "og:description", content: loaderData.worker.bio },
         ]
-      : [{ title: "Worker unavailable — GAW" }, { name: "robots", content: "noindex" }],
+      : [{ title: "Worker Profile — GAW" }],
   }),
   notFoundComponent: () => (
     <div className="grid min-h-screen place-items-center p-6 text-center">
@@ -41,24 +44,82 @@ export const Route = createFileRoute("/workers/$id")({
 });
 
 function ProfilePage() {
-  const { worker } = Route.useLoaderData();
+  const { worker, isSelf } = Route.useLoaderData();
+  const { workerProfile, account, available } = useGaw();
+
+  const resolvedWorker: Worker | null = isSelf
+    ? workerProfile
+      ? {
+          id: "w-me",
+          name: `${account?.name ?? "Your Profile"} (Your Worker Profile)`,
+          initials: "ME",
+          skill: workerProfile.skill,
+          skills: workerProfile.skills,
+          barangayId: workerProfile.barangayId,
+          lat: (workerProfile.area ?? BARANGAYS[0]!).lat,
+          lng: (workerProfile.area ?? BARANGAYS[0]!).lng,
+          rate: 350,
+          available,
+          rating: 4.9,
+          jobsDone: 12,
+          years: 3,
+          bio: workerProfile.description,
+          hours: "Flexible schedule",
+          reviews: [
+            {
+              author: "Maria S.",
+              rating: 5,
+              text: "Great communication and reliable work.",
+              when: "Recent",
+            },
+          ],
+          portfolio: [workerProfile.skill, ...workerProfile.skills.slice(0, 2)],
+        }
+      : null
+    : worker;
+
+  if (!resolvedWorker) {
+    return (
+      <AppLayout
+        mode="hire"
+        back={<BackButton to="/find" label="Back to Nearby Finder" />}
+        title="Worker profile"
+      >
+        <div className="rounded-3xl border bg-card p-6 text-center shadow-soft">
+          <p className="font-bold">
+            Set up your worker profile in Working Mode to preview it here.
+          </p>
+          <Button asChild className="mt-4">
+            <Link to="/work">Go to Working Mode</Link>
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout
       mode="hire"
       back={<BackButton to="/find" label="Back to Nearby Finder" />}
       title="Worker profile"
     >
-      <WorkerProfile worker={worker} />
+      <WorkerProfile worker={resolvedWorker} isSelf={isSelf} />
     </AppLayout>
   );
 }
 
-function WorkerProfile({ worker }: { worker: Worker }) {
-  const { locationId, userGps } = useGaw();
-  const distance = simulatedDistance(worker, locationId, userGps);
-  const Icon = CATEGORY_ICONS[worker.skill];
+function WorkerProfile({ worker, isSelf }: { worker: Worker; isSelf?: boolean }) {
+  const gaw = useGaw();
+  const distance = roundKm(distanceKm(hiringOrigin(gaw), worker));
+  const Icon = iconFor(worker.skill);
 
-  const cta = (
+  const cta = isSelf ? (
+    <Button asChild size="lg" variant="outline" className="w-full">
+      <Link to="/work">
+        <Pencil className="size-4" /> Edit Your Worker Profile
+      </Link>
+    </Button>
+  ) : (
     <Button asChild size="lg" className="w-full">
       <Link to="/book/$workerId" params={{ workerId: worker.id }}>
         Request Booking
@@ -88,8 +149,8 @@ function WorkerProfile({ worker }: { worker: Worker }) {
                   {worker.years} yrs
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="size-4" aria-hidden /> {barangayName(worker.barangayId)} area ·{" "}
-                  {distance.toFixed(1)} km away · Live GPS
+                  <MapPin className="size-4" aria-hidden /> {barangayName(worker.barangayId)} area ·
+                  ≈{distance} km from your location
                 </span>
               </div>
               <div className="mt-2.5">
@@ -104,6 +165,9 @@ function WorkerProfile({ worker }: { worker: Worker }) {
           <p className="leading-relaxed text-muted-foreground">{worker.bio}</p>
           <h3 className="mt-5 text-sm font-bold">Skills</h3>
           <ul className="mt-2 flex flex-wrap gap-2">
+            <li className="rounded-full bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground">
+              {worker.skill} (Primary)
+            </li>
             {worker.skills.map((s) => (
               <li
                 key={s}
@@ -176,7 +240,9 @@ function WorkerProfile({ worker }: { worker: Worker }) {
           </p>
           <div className="mt-5">{cta}</div>
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            No payment now. The worker confirms first.
+            {isSelf
+              ? "You cannot hire yourself. Switch to Working Mode to edit."
+              : "No payment now. The worker confirms first."}
           </p>
         </div>
       </aside>

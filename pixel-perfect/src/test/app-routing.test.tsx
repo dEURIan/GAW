@@ -1,32 +1,32 @@
-import { QueryClient } from "@tanstack/react-query";
-import { createRouter, rootRouteId } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
+import { getRouter } from "@/router";
 
-import { routeTree } from "@/routeTree.gen";
+describe("Application routing tree", () => {
+  it("exposes all expected hiring, working, gig management, verification, and settings routes", () => {
+    const router = getRouter();
+    const paths = Object.keys(router.routesById).map((p) => p.replace(/\/$/, "") || "/");
 
-// Match routes without running loaders or rendering: loaders may need a server or
-// network the test run lacks, and jsdom never loads the stylesheets React waits on.
-describe("App routing", () => {
-  it("matches all GAW core and integrated routes without falling back to not found", () => {
-    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
-
-    for (const path of [
+    for (const expected of [
       "/",
       "/login",
       "/signup",
       "/mode",
       "/hire",
       "/find",
+      "/gigs",
       "/bookings",
       "/work",
       "/jobs",
-      "/jobs/j-1",
+      "/jobs/$id",
       "/my-jobs",
       "/pro",
-      "/requests/r-1",
+      "/verify",
+      "/settings",
+      "/requests/$id",
+      "/workers/$id",
+      "/book/$workerId",
     ]) {
-      const matches = router.matchRoutes(path);
-      expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
+      expect(paths).toContain(expected);
     }
   });
 });

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { BARANGAYS, barangayName, formatDistanceBadge, type Job } from "@/lib/gaw/data";
+import { formatDistanceBadge, type Job } from "@/lib/gaw/data";
 import type { JobWithDistance } from "@/lib/gaw/filter";
 import { useGaw } from "@/lib/gaw/store";
 import { cn } from "@/lib/utils";
@@ -300,34 +300,15 @@ export function LiveGpsTracker({
         </div>
       </div>
 
-      {/* Davao Barangay Quick-Pin & Simulate Location Toolbar */}
+      {/* Live GPS Proximity Notice & Simulate Location Toolbar */}
       {!singleJobMode && (
         <div className="border-b bg-muted/40">
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border/60 px-3 py-2">
-            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              Move Pin:
+          <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
+            <Navigation className="size-3.5 shrink-0 text-primary" aria-hidden />
+            <span>
+              <strong className="text-foreground">Live GPS Tracking System:</strong> Connecting
+              workers and employers in the same general area in real time.
             </span>
-            {BARANGAYS.map((b) => {
-              const active =
-                Math.abs(userGps.lat - b.lat) < 0.004 && Math.abs(userGps.lng - b.lng) < 0.004;
-              return (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() =>
-                    setUserGps(b.lat, b.lng, "barangay", `${b.name}, Davao City Center`, 15)
-                  }
-                  className={cn(
-                    "min-h-8 shrink-0 cursor-pointer rounded-full border px-2.5 text-xs font-semibold transition-colors",
-                    active
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "bg-card text-foreground hover:border-primary",
-                  )}
-                >
-                  {b.name}
-                </button>
-              );
-            })}
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
@@ -495,25 +476,6 @@ export function LiveGpsTracker({
           </button>
         </div>
 
-        {/* Davao District Faint Labels */}
-        {BARANGAYS.map((b) => {
-          const rawPt = latLngToWorldPx(b.lat, b.lng, zoom);
-          const lx = Math.round(rawPt.x - centerWorld.x + viewport.width / 2);
-          const ly = Math.round(rawPt.y - centerWorld.y + viewport.height / 2);
-          if (lx < 16 || lx > viewport.width - 16 || ly < 12 || ly > viewport.height - 12) {
-            return null;
-          }
-          return (
-            <span
-              key={b.id}
-              style={{ left: `${lx}px`, top: `${ly}px` }}
-              className="pointer-events-none absolute z-10 -translate-x-1/2 translate-y-3 rounded bg-white/80 px-1 text-[10px] font-bold uppercase tracking-wider text-deep/75 shadow-xs"
-            >
-              {b.name}
-            </span>
-          );
-        })}
-
         {/* Non-occluding Top-Left Route Telemetry HUD Badge (Foodpanda / Grab style) */}
         {activeJob && (
           <div className="pointer-events-none absolute left-2.5 top-2.5 z-40 flex items-center gap-1.5 rounded-full border border-primary/30 bg-white/95 px-2.5 py-1 text-[11px] font-extrabold text-deep shadow-soft backdrop-blur-sm">
@@ -610,7 +572,7 @@ export function LiveGpsTracker({
                 <div className="mr-1 text-right">
                   <p className="text-lg font-extrabold text-deep">{activeJob.budget}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    ~{activeJob.estimatedHours}h · {barangayName(activeJob.barangayId)}
+                    ~{activeJob.estimatedHours}h · Same general area
                   </p>
                 </div>
                 <Button

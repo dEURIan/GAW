@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { Field, LocationFilter } from "./primitives";
+import { MapPin, Navigation } from "lucide-react";
+import { LocationPicker } from "./GawMap";
+import { Field } from "./primitives";
+import { ServicePicker } from "./ServicePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { Worker } from "@/lib/gaw/data";
+import { BARANGAYS, type Worker } from "@/lib/gaw/data";
+import type { PlacedLocation } from "@/lib/gaw/store";
 import { cn } from "@/lib/utils";
 
 export interface BookingDraft {
@@ -12,6 +16,7 @@ export interface BookingDraft {
   date: string;
   time: string;
   barangayId: string;
+  location?: PlacedLocation | null;
   budgetMode: "budget" | "quote";
   budget: string;
 }
@@ -30,7 +35,7 @@ function todayISO() {
 
 export function validateBooking(d: BookingDraft, today = todayISO()) {
   const e: Partial<Record<keyof BookingDraft, string>> = {};
-  if (!d.service) e.service = "Choose a service type.";
+  if (!d.service || !d.service.trim()) e.service = "Choose or enter a service type.";
   if (d.description.trim().length < 10)
     e.description = "Describe the job in at least 10 characters.";
   if (!d.date) e.date = "Pick a preferred date.";
@@ -54,10 +59,11 @@ export function BookingForm({
   onReview: (d: BookingDraft) => void;
 }) {
   const [d, setD] = useState<BookingDraft>(initial);
+  const [showMap, setShowMap] = useState(false);
   const [errors, setErrors] = useState<ReturnType<typeof validateBooking>>({});
   const set = <K extends keyof BookingDraft>(k: K, v: BookingDraft[K]) =>
     setD((s) => ({ ...s, [k]: v }));
-  const services = Array.from(new Set([worker.skill, ...worker.skills]));
+  const workerServices = Array.from(new Set([worker.skill, ...worker.skills]));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -72,22 +78,21 @@ export function BookingForm({
     "aria-describedby": errors[k] ? `${k}-error` : undefined,
   });
 
+  const currentBrgy = BARANGAYS.find((b) => b.id === d.barangayId) ?? BARANGAYS[0]!;
+  const mapInit = d.location ?? { lat: currentBrgy.lat, lng: currentBrgy.lng };
+
   return (
     <form noValidate onSubmit={submit} className="space-y-5">
-      <Field id="service" label="Service Type" error={errors.service}>
-        <select
-          id="service"
-          className="field"
-          value={d.service}
-          onChange={(e) => set("service", e.target.value)}
-          {...aria("service")}
-        >
-          <option value="">Select a service</option>
-          {services.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      </Field>
+      <ServicePicker
+        id="service"
+        label="Service Type (Predefined or Custom)"
+        value={d.service}
+        onChange={(svc) => set("service", svc)}
+        extraOptions={workerServices}
+        allowCustom
+        error={errors.service}
+      />
+
       <Field
         id="description"
         label="Job Description"
@@ -102,6 +107,7 @@ export function BookingForm({
           {...aria("description")}
         />
       </Field>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="date" label="Preferred Date" error={errors.date}>
           <Input
@@ -130,12 +136,49 @@ export function BookingForm({
           </select>
         </Field>
       </div>
-      <LocationFilter
-        id="barangayId"
-        label="Barangay / Service Area"
-        value={d.barangayId}
-        onChange={(v) => set("barangayId", v)}
-      />
+
+      <div className="space-y-3 rounded-2xl border bg-muted/40 p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Live GPS Service Area
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Through our live GPS tracking system, we connect you with workers in the same general
+              area.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={showMap ? "default" : "outline"}
+            onClick={() => setShowMap((v) => !v)}
+          >
+            <Navigation className="size-3.5" />
+            {showMap ? "Close Map" : "Pinpoint on Map / GPS"}
+          </Button>
+        </div>
+
+        {d.location && (
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+            <MapPin className="size-3.5" aria-hidden /> Pinpointed: {d.location.label}
+          </p>
+        )}
+
+        {showMap && (
+          <LocationPicker
+            modeLabel="Pinpoint Job Service Location"
+            initialLocation={mapInit}
+            initialBarangayId={d.barangayId}
+            initialLabel={d.location?.label ?? "Live GPS · General Area"}
+            onConfirm={(placed, brgyId) => {
+              set("barangayId", brgyId);
+              set("location", placed);
+              setShowMap(false);
+            }}
+          />
+        )}
+      </div>
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Budget</legend>
@@ -149,10 +192,10 @@ export function BookingForm({
             <label
               key={v}
               className={cn(
-                "flex h-11 cursor-pointer items-center justify-center rounded-xl border text-sm font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                "flex h-11 cursor-pointer items-center justify-center rounded-xl border text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-160 ease-out active:scale-[0.98] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none motion-reduce:active:scale-100",
                 d.budgetMode === v
-                  ? "border-primary bg-secondary text-secondary-foreground"
-                  : "bg-card text-muted-foreground",
+                  ? "border-primary bg-secondary text-secondary-foreground shadow-xs ring-1 ring-inset ring-primary/25"
+                  : "bg-card text-muted-foreground hover:border-hover-border hover:bg-hover-surface hover:text-foreground",
               )}
             >
               <input

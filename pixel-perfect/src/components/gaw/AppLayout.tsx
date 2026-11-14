@@ -1,346 +1,499 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Briefcase,
   CalendarCheck,
+  ChevronDown,
   ClipboardList,
   Crown,
   Home,
   LogOut,
+  MapPin,
+  Monitor,
+  Moon,
+  RefreshCw,
   RotateCcw,
   Search,
   Settings,
-  type LucideIcon,
+  ShieldAlert,
+  ShieldCheck,
+  Sun,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Logo, Avatar } from "./primitives";
+import {
+  FOCUS_RING,
+  REDUCED_MOTION_RESET,
+  segmentedOptionClass,
+} from "@/components/gaw/interactions";
+import { Avatar, HeaderBrand } from "@/components/gaw/primitives";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuHighlightGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  bookingsFor,
+  canPerformProtectedAction,
+  hasPlan,
+  hiringOriginLabel,
+  initialsOf,
+  useGaw,
+  type Mode,
+} from "@/lib/gaw/store";
+import { useTheme, type ThemePref } from "@/lib/gaw/theme";
 import { cn } from "@/lib/utils";
-import { useGaw, type Mode } from "@/lib/gaw/store";
 
-type NavItem = {
-  to: "/hire" | "/find" | "/bookings" | "/work" | "/jobs" | "/my-jobs";
-  label: string;
-  icon: LucideIcon;
-};
-
-const NAV: Record<Mode, NavItem[]> = {
+const NAV = {
   hire: [
-    { to: "/hire", label: "Home", icon: Home },
-    { to: "/find", label: "Find", icon: Search },
-    { to: "/bookings", label: "Bookings", icon: CalendarCheck },
+    { to: "/hire" as const, label: "Home", icon: Home },
+    { to: "/find" as const, label: "Find", icon: Search },
+    { to: "/gigs" as const, label: "My Gigs", icon: ClipboardList },
+    { to: "/bookings" as const, label: "Bookings", icon: CalendarCheck },
   ],
   work: [
-    { to: "/work", label: "Home", icon: Home },
-    { to: "/jobs", label: "Jobs", icon: Briefcase },
-    { to: "/my-jobs", label: "My Jobs", icon: ClipboardList },
+    { to: "/work" as const, label: "Home", icon: Home },
+    { to: "/jobs" as const, label: "Jobs", icon: Briefcase },
+    { to: "/my-jobs" as const, label: "My Jobs", icon: ClipboardList },
   ],
 };
 
-/** Redirects to /login once demo state has loaded and nobody is signed in. */
 export function useRequireSignIn() {
   const { hydrated, signedIn } = useGaw();
   const navigate = useNavigate();
+
   useEffect(() => {
-    if (hydrated && !signedIn) navigate({ to: "/login" });
+    if (hydrated && !signedIn) {
+      void navigate({ to: "/login" });
+    }
   }, [hydrated, signedIn, navigate]);
+
   return hydrated && signedIn;
 }
 
 export function ModeSwitcher({ className }: { className?: string }) {
   const { mode, setMode } = useGaw();
   const navigate = useNavigate();
-  const current: Mode = mode ?? "hire";
-  const go = (m: Mode) => {
-    if (m === current) return;
+
+  const pick = (m: Mode) => {
     setMode(m);
-    navigate({ to: m === "hire" ? "/hire" : "/work" });
-    toast.success(m === "hire" ? "Switched to Hiring mode" : "Switched to Working mode");
+    void navigate({ to: m === "hire" ? "/hire" : "/work" });
   };
+
   return (
     <div
       role="group"
-      aria-label="Switch mode"
+      aria-label="Current mode"
       className={cn(
-        "inline-flex rounded-full border bg-card p-1 text-xs font-semibold shadow-soft",
+        "inline-flex rounded-full border bg-muted p-0.5 text-xs font-semibold",
         className,
       )}
     >
-      {(["hire", "work"] as Mode[]).map((m) => (
+      {(
+        [
+          ["hire", "Hiring"],
+          ["work", "Working"],
+        ] as const
+      ).map(([m, label]) => (
         <button
           key={m}
           type="button"
-          aria-pressed={current === m}
-          onClick={() => go(m)}
-          className={cn(
-            "min-h-9 cursor-pointer rounded-full px-3.5 transition-colors",
-            current === m
-              ? "bg-deep text-deep-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
+          onClick={() => pick(m)}
+          aria-pressed={mode === m}
+          className={segmentedOptionClass(mode === m, "primary", "rounded-full px-3 py-1")}
         >
-          {m === "hire" ? "Hiring" : "Working"}
+          {label}
         </button>
       ))}
     </div>
   );
 }
 
-function AccountMenu({ navMode }: { navMode: Mode }) {
-  const { account, logOut, resetDemo, plans, togglePlan } = useGaw();
-  const navigate = useNavigate();
-  if (!account) return null;
-  const isHiringSide = navMode === "hire";
-  const isEmployerPro = isHiringSide && plans.includes("employer");
-  const initials = account.name
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+export function ThemeSegmentedControl({ compact = false }: { compact?: boolean }) {
+  const { pref, setPref } = useTheme();
+  const options: { value: ThemePref; label: string; icon: typeof Sun }[] = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+    { value: "system", label: "System", icon: Monitor },
+  ];
+
   return (
-    <DropdownMenu>
+    <div
+      role="group"
+      aria-label="Theme preference"
+      className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1"
+    >
+      {options.map((opt) => {
+        const Icon = opt.icon;
+        const active = pref === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setPref(opt.value)}
+            aria-pressed={active}
+            aria-label={compact ? `${opt.label} theme` : undefined}
+            title={`${opt.label} theme`}
+            className={segmentedOptionClass(
+              active,
+              "card",
+              "inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold",
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden />
+            {!compact && <span>{opt.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export const ThemeToggle = ThemeSegmentedControl;
+
+export function AccountMenu() {
+  const { account, mode, plans, verification, logOut, resetDemo } = useGaw();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  if (!account) return null;
+
+  const isEmployerPro = hasPlan(plans, "employer");
+  const showProBadge = mode === "hire" && isEmployerPro;
+  const verif = canPerformProtectedAction(verification);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="relative cursor-pointer rounded-2xl"
           aria-label="Account menu"
+          className={cn(
+            "inline-flex cursor-pointer items-center gap-2 rounded-full border bg-card py-1 pr-2.5 pl-1 text-left transition-[background-color,border-color,box-shadow,transform] duration-180 ease-out hover:border-hover-border hover:bg-hover-surface active:scale-[0.98] aria-[expanded=true]:ring-2 aria-[expanded=true]:ring-primary aria-[expanded=true]:ring-offset-2 aria-[expanded=true]:ring-offset-background",
+            FOCUS_RING,
+            REDUCED_MOTION_RESET,
+          )}
         >
-          <Avatar initials={initials} size="sm" />
-          {isEmployerPro && (
-            <span
-              title="Employer Pro active"
-              className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-gold text-gold-foreground shadow-sm"
-            >
-              <Crown className="size-2.5" aria-hidden />
+          <Avatar initials={initialsOf(account.name)} size="sm" />
+          <span className="hidden max-w-28 truncate text-xs font-bold sm:inline">
+            {account.name}
+          </span>
+          {showProBadge && (
+            <span className="hidden rounded-full bg-gold-soft px-1.5 py-0.5 text-[10px] font-extrabold text-gold-foreground sm:inline">
+              PRO
             </span>
           )}
+          <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="z-50 w-72 overflow-hidden rounded-2xl border bg-card p-0 shadow-lift"
-      >
-        {/* Profile Banner */}
-        <DropdownMenuLabel className="bg-contour px-4 py-3.5 text-deep-foreground">
-          <div className="flex items-center gap-3">
-            <Avatar initials={initials} size="sm" className="ring-2 ring-deep-foreground/20" />
+
+      <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2">
+        <DropdownMenuLabel className="px-2.5 py-2">
+          <div className="flex items-center gap-2.5">
+            <Avatar initials={initialsOf(account.name)} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{account.name}</p>
-              <p className="truncate text-xs font-normal text-deep-muted">{account.email}</p>
+              <p className="truncate text-sm font-bold">{account.name}</p>
+              <p className="truncate text-xs font-normal text-muted-foreground">{account.email}</p>
             </div>
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="rounded-full bg-deep-foreground/15 px-2 py-0.5 text-[10px] font-bold text-deep-foreground">
-              {isHiringSide ? "Hiring mode" : "Working mode"}
+          {showProBadge && (
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-gold-soft px-2.5 py-0.5 text-[11px] font-bold text-gold-foreground">
+              <Crown className="size-3" aria-hidden /> Employer Pro Active
             </span>
-            {isEmployerPro ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold text-gold-foreground">
-                <Crown className="size-3" aria-hidden /> Employer Pro
-              </span>
-            ) : (
-              account.isDemo && (
-                <span className="rounded-full bg-deep-foreground/15 px-2 py-0.5 text-[10px] font-semibold text-deep-muted">
-                  Demo Account
-                </span>
-              )
-            )}
-          </div>
+          )}
         </DropdownMenuLabel>
 
-        {/* Employer-only Premium Buyout Option directly under Profile Banner */}
-        {isHiringSide && (
-          <div className="border-b bg-gold-soft/55 p-2">
-            <DropdownMenuItem
-              onSelect={() => {
-                if (!isEmployerPro) {
-                  togglePlan("employer", true);
-                  toast.success("Employer Pro Buyout activated (2% fee & unlimited gigs)!");
-                } else {
-                  navigate({ to: "/pro" });
-                }
-              }}
-              className="flex items-start gap-2.5 rounded-xl bg-white/80 p-2.5 focus:bg-white"
-            >
-              <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-gold text-gold-foreground">
-                <Crown className="size-4" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-extrabold text-foreground">
-                  {isEmployerPro ? "Employer Pro Active" : "Employer Pro Buyout · ₱299"}
-                </p>
-                <p className="text-[11px] font-normal text-muted-foreground">
-                  {isEmployerPro
-                    ? "Manage plan & billing details"
-                    : "Unlimited gig posts & reduced 2% fee"}
-                </p>
-              </div>
-            </DropdownMenuItem>
-          </div>
-        )}
+        <DropdownMenuSeparator />
 
-        {/* Settings & Account Actions */}
-        <div className="p-1">
-          {isHiringSide ? (
+        <div className="px-2 py-1.5">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Appearance
+          </p>
+          <ThemeSegmentedControl />
+        </div>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuHighlightGroup>
+          <DropdownMenuItem asChild className="rounded-xl">
+            <Link to="/verify" className="flex w-full items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2">
+                {verif.allowed ? (
+                  <ShieldCheck className="size-4 text-status-confirmed" aria-hidden />
+                ) : (
+                  <ShieldAlert className="size-4 text-gold" aria-hidden />
+                )}
+                Verification & ID
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                  verif.allowed
+                    ? "bg-status-confirmed-bg text-status-confirmed"
+                    : verif.isPending
+                      ? "bg-status-pending-bg text-status-pending"
+                      : "bg-gold-soft text-gold-foreground",
+                )}
+              >
+                {verif.allowed ? "Verified" : verif.isPending ? "Pending" : "Unverified"}
+              </span>
+            </Link>
+          </DropdownMenuItem>
+
+          {mode === "hire" && (
             <>
-              <DropdownMenuItem onSelect={() => navigate({ to: "/pro" })}>
-                <Settings /> Employer Pro & Billing Settings
+              <DropdownMenuItem asChild className="rounded-xl">
+                <Link to="/gigs" className="flex items-center gap-2">
+                  <ClipboardList className="size-4" aria-hidden />
+                  My Posted Gigs
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => navigate({ to: "/mode" })}>
-                <Briefcase /> Switch Role / Mode
-              </DropdownMenuItem>
-            </>
-          ) : (
-            <>
-              <DropdownMenuItem onSelect={() => navigate({ to: "/work" })}>
-                <Settings /> Worker Profile & Availability
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => navigate({ to: "/my-jobs" })}>
-                <ClipboardList /> Saved & Desired Gigs
+              <DropdownMenuItem asChild className="rounded-xl">
+                <Link to="/pro" className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-2">
+                    <Crown className="size-4 text-gold" aria-hidden />
+                    GAW Employer Pro
+                  </span>
+                  {isEmployerPro && (
+                    <span className="rounded-full bg-gold-soft px-2 py-0.5 text-[10px] font-bold text-gold-foreground">
+                      Active
+                    </span>
+                  )}
+                </Link>
               </DropdownMenuItem>
             </>
           )}
+
+          <DropdownMenuItem asChild className="rounded-xl">
+            <Link to="/settings" className="flex items-center gap-2">
+              <Settings className="size-4" aria-hidden />
+              Settings
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem asChild className="rounded-xl">
+            <Link to="/mode" className="flex items-center gap-2">
+              <RefreshCw className="size-4" aria-hidden />
+              Switch role
+            </Link>
+          </DropdownMenuItem>
+
           <DropdownMenuSeparator />
+
           <DropdownMenuItem
-            onSelect={() => {
+            tone="warning"
+            onClick={() => {
               resetDemo();
-              toast("Demo data reset");
-              navigate({ to: "/" });
+              toast.success("Demo data reset.");
+              void navigate({ to: "/login" });
             }}
+            className="rounded-xl"
           >
-            <RotateCcw /> Reset demo data
+            <RotateCcw className="size-4" aria-hidden />
+            Reset demo data
           </DropdownMenuItem>
+
           <DropdownMenuItem
-            onSelect={() => {
+            tone="destructive"
+            onClick={() => {
               logOut();
-              navigate({ to: "/" });
+              void navigate({ to: "/login" });
             }}
+            className="rounded-xl"
           >
-            <LogOut /> Log out
+            <LogOut className="size-4" aria-hidden />
+            Sign out
           </DropdownMenuItem>
-        </div>
+        </DropdownMenuHighlightGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 export function AppLayout({
-  mode,
-  title,
-  back,
   children,
+  mode,
+  back,
+  title,
+  hideNav,
 }: {
-  /** Which side of GAW this page belongs to; omit for shared pages (e.g. Pro). */
-  mode?: Mode;
-  title?: string;
-  back?: ReactNode;
   children: ReactNode;
+  mode?: Mode;
+  back?: ReactNode;
+  title?: string;
+  hideNav?: boolean;
 }) {
   const ready = useRequireSignIn();
-  const gaw = useGaw();
+  const { mode: storedMode, setMode, bookings, locationId, serviceLocation, customJobs } = useGaw();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
-    if (ready && mode && gaw.mode !== mode) gaw.setMode(mode);
-  }, [ready, mode, gaw]);
+    if (ready && mode && storedMode !== mode) {
+      setMode(mode);
+    }
+  }, [ready, mode, storedMode, setMode]);
 
-  const navMode: Mode = mode ?? gaw.mode ?? "hire";
-  const items = NAV[navMode];
-  const isActive = (to: string) =>
-    pathname === to || (to !== "/hire" && to !== "/work" && pathname.startsWith(to));
+  if (!ready) return null;
 
-  if (!ready) {
-    return (
-      <div className="grid min-h-screen place-items-center" aria-busy="true">
-        <div className="size-8 animate-spin rounded-full border-4 border-secondary border-t-primary" />
-      </div>
-    );
-  }
+  const activeMode = mode ?? storedMode;
+  const items = activeMode ? NAV[activeMode] : [];
+  const hiringPending = bookingsFor(bookings, "hiring").filter(
+    (b) => b.status === "pending",
+  ).length;
+  const workingPending = bookingsFor(bookings, "working").filter(
+    (b) => b.status === "pending",
+  ).length;
+
+  const badgeFor = (to: string) => {
+    if (to === "/bookings" && hiringPending > 0) return hiringPending;
+    if (to === "/my-jobs" && workingPending > 0) return workingPending;
+    if (to === "/gigs" && customJobs.length > 0) return customJobs.length;
+    return 0;
+  };
+
+  const locLabel =
+    activeMode === "hire"
+      ? hiringOriginLabel({ serviceLocation, locationId })
+      : "Live GPS · General Area";
 
   return (
-    <div className="min-h-screen pb-24 md:pb-10">
-      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 md:px-6">
-          <Link to={navMode === "hire" ? "/hire" : "/work"} aria-label="GAW home">
-            <Logo />
-          </Link>
-          <nav aria-label="Main" className="ml-6 hidden items-center gap-1 md:flex">
-            {items.map((it) => (
-              <Link
-                key={it.to}
-                to={it.to}
-                className={cn(
-                  "inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-colors",
-                  isActive(it.to)
-                    ? "bg-secondary text-secondary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+    <div className="min-h-dvh bg-background text-foreground">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
+
+      <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            {back ? (
+              <>
+                {back}
+                {title && (
+                  <h1 className="truncate text-lg font-extrabold tracking-tight sm:text-xl">
+                    {title}
+                  </h1>
                 )}
+              </>
+            ) : (
+              <HeaderBrand />
+            )}
+
+            {activeMode && !back && (
+              <Link
+                to={activeMode === "hire" ? "/find" : "/jobs"}
+                className="hidden items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
-                <it.icon className="size-4" aria-hidden />
-                {it.label}
+                <MapPin className="size-3.5 text-primary" aria-hidden />
+                <span className="max-w-44 truncate">{locLabel}</span>
               </Link>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-2.5">
-            <ModeSwitcher />
-            <AccountMenu navMode={navMode} />
+            )}
+          </div>
+
+          {!hideNav && activeMode && (
+            <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+              {items.map((it) => {
+                const Icon = it.icon;
+                const active = pathname === it.to || pathname.startsWith(`${it.to}/`);
+                const badge = badgeFor(it.to);
+                return (
+                  <Link
+                    key={it.to}
+                    to={it.to}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-160 ease-out active:scale-[0.97] [&>svg]:transition-transform [&>svg]:duration-160",
+                      FOCUS_RING,
+                      REDUCED_MOTION_RESET,
+                      active
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:bg-hover-surface hover:text-foreground hover:[&>svg]:scale-110 hover:[&>svg]:text-primary",
+                    )}
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {it.label}
+                    {badge > 0 && (
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-extrabold leading-none",
+                          active ? "bg-white/20 text-white" : "bg-primary/15 text-primary",
+                        )}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+
+          <div className="flex items-center gap-2">
+            {activeMode && (
+              <div className="hidden sm:block">
+                <ModeSwitcher />
+              </div>
+            )}
+            <AccountMenu />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pt-5 md:px-6 md:pt-8">
-        {(title || back) && (
-          <div className="mb-5 flex items-center gap-3">
-            {back}
-            {title && (
-              <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{title}</h1>
-            )}
-          </div>
+      <main
+        id="main-content"
+        className={cn(
+          "mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8",
+          !hideNav && activeMode && items.length > 0 && "pb-24 md:pb-10",
+        )}
+      >
+        {title && !back && (
+          <h1 className="mb-6 text-2xl font-extrabold tracking-tight sm:text-3xl">{title}</h1>
         )}
         {children}
       </main>
 
-      <nav
-        aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
-      >
-        <ul className="mx-auto grid max-w-md grid-cols-3">
-          {items.map((it) => {
-            const active = isActive(it.to);
-            return (
-              <li key={it.to}>
-                <Link
-                  to={it.to}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 flex-col items-center justify-center gap-1 text-[0.7rem] font-semibold transition-colors",
-                    active ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  <span
+      {!hideNav && activeMode && items.length > 0 && (
+        <nav
+          aria-label="Mobile navigation"
+          className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur-md md:hidden"
+        >
+          <ul
+            className={cn(
+              "mx-auto grid max-w-md",
+              items.length === 3 ? "grid-cols-3" : "grid-cols-4",
+            )}
+          >
+            {items.map((it) => {
+              const Icon = it.icon;
+              const active = pathname === it.to || pathname.startsWith(`${it.to}/`);
+              const badge = badgeFor(it.to);
+              return (
+                <li key={it.to}>
+                  <Link
+                    to={it.to}
                     className={cn(
-                      "grid h-7 w-12 place-items-center rounded-full",
-                      active && "bg-secondary",
+                      "relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                      active ? "text-primary" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    <it.icon className="size-5" aria-hidden />
-                  </span>
-                  {it.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+                    <Icon className="size-5" aria-hidden />
+                    {badge > 0 && (
+                      <span className="absolute top-1.5 right-1/4 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-extrabold leading-none text-primary-foreground">
+                        {badge}
+                      </span>
+                    )}
+                    {it.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
     </div>
   );
 }
@@ -349,7 +502,17 @@ export function BackButton({
   to,
   label = "Back",
 }: {
-  to: "/hire" | "/find" | "/work" | "/jobs" | "/bookings" | "/my-jobs";
+  to:
+    | "/hire"
+    | "/find"
+    | "/gigs"
+    | "/work"
+    | "/jobs"
+    | "/bookings"
+    | "/my-jobs"
+    | "/verify"
+    | "/settings"
+    | "/pro";
   label?: string;
 }) {
   return (

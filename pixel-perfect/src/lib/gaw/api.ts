@@ -19,6 +19,14 @@ export interface BackendGigDto {
   createdAt: string;
 }
 
+export interface ApiPricingBreakdown {
+  baseWageFloorPhp: number;
+  skillPremiumPhp: number;
+  toolAllowancePhp: number;
+  transportAllowancePhp: number;
+  urgencyPremiumPhp: number;
+}
+
 export interface ApiPricingEstimate {
   minimumWageFloorPhp: number;
   suggestedMinPhp: number;
@@ -26,10 +34,13 @@ export interface ApiPricingEstimate {
   suggestedMaxPhp: number;
   hourlyRateRecommendedPhp: number;
   source: "heuristic" | "external_ai";
+  legalBasis?: string;
+  logicalBasis?: string;
   rationale: string;
+  breakdown?: ApiPricingBreakdown;
 }
 
-const CATEGORY_TO_BACKEND: Record<Category, string> = {
+const CATEGORY_TO_BACKEND: Record<string, string> = {
   Plumbing: "plumbing",
   Electrical: "electrical",
   Carpentry: "carpentry",
@@ -49,11 +60,11 @@ const BACKEND_TO_CATEGORY: Record<string, Category> = {
 };
 
 export function toBackendCategory(category: Category): string {
-  return CATEGORY_TO_BACKEND[category];
+  return CATEGORY_TO_BACKEND[category] ?? "handyman";
 }
 
 export function fromBackendCategory(raw: string): Category {
-  return BACKEND_TO_CATEGORY[raw.toLowerCase()] ?? "Handyman";
+  return BACKEND_TO_CATEGORY[raw.toLowerCase()] ?? (raw.trim() || "Handyman");
 }
 
 function inferBarangayId(barangayLabel: string, lat: number, lng: number): string {
@@ -136,6 +147,9 @@ export async function requestPricingEstimateFromApi(input: {
   category: Category;
   estimatedHours: number;
   urgency: "standard" | "urgent";
+  title?: string;
+  description?: string;
+  barangay?: string;
 }): Promise<ApiPricingEstimate | null> {
   return safeJsonFetch<ApiPricingEstimate>("/api/v1/pricing/estimate", {
     method: "POST",
@@ -144,6 +158,9 @@ export async function requestPricingEstimateFromApi(input: {
       estimatedHours: input.estimatedHours,
       urgency: input.urgency,
       requiredSkills: [input.category],
+      title: input.title,
+      description: input.description,
+      barangay: input.barangay,
     }),
   });
 }

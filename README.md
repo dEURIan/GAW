@@ -1,13 +1,13 @@
 # GAW — Davao City Gig & Sidejob Platform
 
-GAW is a mobile-first full-stack gig and sidejob marketplace built for **Davao City (Region XI)**, connecting local workers and employers across Poblacion, Bajada, Matina, Buhangin, Lanang, Toril, Mintal, and Talomo.
+GAW is a mobile-first full-stack gig and sidejob marketplace built for **Davao City (Region XI)**. Through a **live GPS tracking system**, GAW connects workers and employers in the **same general area** in real time — without restricting discovery to fixed city hubs.
 
 ## Key Features
 
-- **Live GPS Job Tracker (`/jobs`)**: Interactive 1:1 Web Mercator street map (`z12–z18`) using real continuous `navigator.geolocation.watchPosition` tracking, Haversine distances, walk/commute ETAs, plus simulated location controls (barangay presets, directional steps, and Worker Walk Demo).
-- **Live GPS Nearby Worker Finder (`/find`)**: Concentric-ring radar and worker directory powered by live or simulated GPS coordinates (`km away · Live GPS`), instant barangay simulation, and one-tap `Pinpoint GPS` re-lock.
+- **Live GPS Job Tracker (`/jobs`)**: Interactive 1:1 Web Mercator street map (`z12–z18`) using real continuous `navigator.geolocation.watchPosition` tracking, Haversine distances, walk/commute ETAs, plus directional/route GPS simulation connecting workers and employers in the same general area.
+- **Live GPS Nearby Worker Finder (`/find`)**: Concentric-ring radar and worker directory powered by live or simulated GPS coordinates (`km away · Live GPS`), connecting nearby workers and employers in the same general area with one-tap `Use Live GPS` re-lock.
 - **Fair Pay & Pricing Options (`/hire`)**: Enforces the Davao Region XI minimum wage floor (**₱508/day** / **₱63.50/hr**) across both **Use AI Pricer** and **Manual Pricing** modes, alongside worker minimum-wage fee protection.
-- **Free Worker Experience & Employer Pro Buyout (`/pro`)**: All worker features are 100% free; the optional **Employer Pro Buyout (`₱299/mo`)** exists exclusively on the employer side under the profile banner and account menu.
+- **Free Worker Experience & Employer Pro Buyout (`/pro`)**: All worker features are 100% free; the optional **Employer Pro Buyout (`₱69/mo`)** exists exclusively on the employer side under the profile banner and account menu.
 - **Mobile-First PWA**: Installable Progressive Web App with `manifest.webmanifest` (`display: standalone`) and an offline-capable service worker (`sw.js`).
 
 ## Repository Structure

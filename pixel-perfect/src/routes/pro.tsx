@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2, Crown, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/gaw/AppLayout";
+import { selectableOptionCardClass } from "@/components/gaw/interactions";
 import { Button } from "@/components/ui/button";
 import { useGaw } from "@/lib/gaw/store";
 import { cn } from "@/lib/utils";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/pro")({
       {
         name: "description",
         content:
-          "Compare Employer Standard (Free) and Employer Pro Membership (₱299/mo · 2% settlement fee & unlimited Davao City open gigs).",
+          "Compare Employer Standard (Free) and Employer Pro Membership (₱69/mo · 2% settlement fee & unlimited Davao City open gigs).",
       },
     ],
   }),
@@ -55,9 +56,9 @@ function ProPlansPage() {
       <div className="grid gap-5 md:grid-cols-2">
         {/* Employer Standard (Free Tier) */}
         <article
-          className={cn(
-            "flex flex-col justify-between rounded-3xl border bg-card p-6 shadow-soft",
-            !isEmployerPro && "border-primary ring-2 ring-primary/20",
+          className={selectableOptionCardClass(
+            !isEmployerPro,
+            "flex flex-col justify-between rounded-3xl border bg-card p-6",
           )}
         >
           <div>
@@ -103,9 +104,9 @@ function ProPlansPage() {
 
         {/* Employer Pro Buyout */}
         <article
-          className={cn(
-            "flex flex-col justify-between rounded-3xl border bg-card p-6 shadow-soft transition-shadow",
-            isEmployerPro && "border-primary ring-2 ring-primary/25",
+          className={selectableOptionCardClass(
+            isEmployerPro,
+            "flex flex-col justify-between rounded-3xl border bg-card p-6",
           )}
         >
           <div>
@@ -121,7 +122,7 @@ function ProPlansPage() {
             </div>
 
             <h3 className="mt-4 text-xl font-extrabold">GAW Employer Pro</h3>
-            <p className="mt-1 text-3xl font-extrabold text-deep">₱299 / month</p>
+            <p className="mt-1 text-3xl font-extrabold text-deep">₱69 / month</p>
             <p className="mt-1.5 text-sm font-medium text-primary">
               Reduced 2% employer settlement fee (down from 5% Standard)
             </p>
@@ -131,7 +132,7 @@ function ProPlansPage() {
 
             <ul className="mt-5 space-y-2.5 border-t pt-4">
               {[
-                "Unlimited open gig postings across Davao City barangays",
+                "Unlimited open gig postings connected via live GPS in your general area",
                 "Reduced 2% transaction fee (down from 5% Standard)",
                 "Priority placement on nearby Davao gig feeds",
                 "AI Price Advisor + automatic ₱63.50/hr wage compliance check",

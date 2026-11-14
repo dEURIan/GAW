@@ -74,7 +74,7 @@ export const TIER_CONFIG = {
     maxSavedOrActiveEmployeeGigs: Infinity,
     employerFeeRate: 0.02,
     employeeFeeRate: 0.0,
-    monthlyPricePhpEmployer: 299,
-    monthlyPricePhpEmployee: 99,
+    monthlyPricePhpEmployer: 69,
+    monthlyPricePhpEmployee: 69,
   },
 } as const;

@@ -31,7 +31,7 @@ Build order: `identity-and-tiers`, `wage-and-ai-pricing` → `gig-proximity-mark
    - Employees save gigs to their personal desired-gigs list (`saved_gigs`), returned ordered by `distanceKm ASC` from the employee's coordinates.
 4. **Freemium & Transaction Fees**:
    - `FREE` Employer: max **3** active `OPEN` gigs; **5%** platform fee added on completion (`employerTotalChargePhp = grossAmountPhp + employerFeePhp`).
-   - `PRO` Employer (₱299/mo): unlimited active `OPEN` gigs; **2%** platform fee; distance-tie priority boost.
+   - `PRO` Employer (₱69/mo): unlimited active `OPEN` gigs; **2%** platform fee; distance-tie priority boost.
    - `FREE` Employee: max **5** saved/desired gigs and max **5** active (`PENDING`) applications; **5%** platform fee deducted from gross payout, **capped** so `workerNetPayoutPhp >= minimumRequiredPhp`.
    - `PRO` Employee (₱99/mo): unlimited saved gigs & applications; **0%** platform fee.
 

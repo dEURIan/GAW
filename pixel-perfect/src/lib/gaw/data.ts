@@ -1,6 +1,7 @@
 // Seeded, fictional Davao City data for the GAW demo. All people and businesses are invented.
 
-export const CATEGORIES = [
+/** The six original services, shown as shortcuts on the Hiring home. */
+export const FEATURED_CATEGORIES = [
   "Plumbing",
   "Electrical",
   "Carpentry",
@@ -8,7 +9,44 @@ export const CATEGORIES = [
   "Painting",
   "Handyman",
 ] as const;
-export type Category = (typeof CATEGORIES)[number];
+
+/** Predefined services. Users can always pick "Other Services" and type their own. */
+export const CATEGORIES = [
+  ...FEATURED_CATEGORIES,
+  "Gardening",
+  "Appliance Repair",
+  "Air Conditioning Services",
+  "Welding",
+  "Furniture Assembly",
+  "Moving Assistance",
+  "Computer Repair",
+  "Tutoring",
+  "Photography",
+  "General Labor",
+] as const;
+
+export const OTHER_CATEGORY = "Other Services";
+
+/** A service name: one of CATEGORIES or any custom name a user typed. */
+export type Category = string;
+
+/** Extra suggestions for worker skills, on top of CATEGORIES. Custom skills are still allowed. */
+export const SKILL_SUGGESTIONS = [
+  ...CATEGORIES,
+  "Graphic Design",
+  "Graphic Designer",
+  "Computer Technician",
+  "Motorcycle Repair",
+  "Motorcycle Mechanic",
+  "Tutor",
+  "Laundry & Ironing",
+  "Roofing",
+  "Masonry",
+  "Tile Work",
+  "Pest Control",
+  "Event Setup",
+  "Cooking & Catering",
+];
 
 export const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
 export type Radius = (typeof RADIUS_OPTIONS)[number];
@@ -20,7 +58,7 @@ export interface Barangay {
   lng: number;
 }
 
-// Approximate area centers, used only to simulate distances in the demo.
+// Approximate area centers, used to anchor Davao City barangays.
 export const BARANGAYS: Barangay[] = [
   { id: "poblacion", name: "Poblacion", lat: 7.0707, lng: 125.6087 },
   { id: "bajada", name: "Bajada", lat: 7.085, lng: 125.61 },
@@ -35,6 +73,26 @@ export const BARANGAYS: Barangay[] = [
 export function barangayName(id: string) {
   return BARANGAYS.find((b) => b.id === id)?.name ?? id;
 }
+
+export function barangayById(id: string): Barangay {
+  return BARANGAYS.find((b) => b.id === id) ?? BARANGAYS[0]!;
+}
+
+export function nearestBarangay(p: { lat: number; lng: number }) {
+  let best = BARANGAYS[0]!;
+  let bestD = Infinity;
+  for (const b of BARANGAYS) {
+    const d = (b.lat - p.lat) ** 2 + (b.lng - p.lng) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+/** Rough center of Davao City, used to warn when a GPS fix is far from the demo area. */
+export const DAVAO_CENTER = { lat: 7.0731, lng: 125.6128 };
 
 export interface Review {
   author: string;
@@ -419,6 +477,124 @@ export const WORKERS: Worker[] = [
     ],
     portfolio: ["TV wall mount", "Curtain rod install", "Condo fixture swap"],
   },
+  {
+    id: "w-edgar",
+    name: "Edgar Lumapas",
+    initials: "EL",
+    skill: "Motorcycle Repair",
+    skills: ["Motorcycle Mechanic", "Carburetor tune-up", "Brake repair", "Oil change"],
+    barangayId: "buhangin",
+    lat: 7.1041,
+    lng: 125.6201,
+    rate: 300,
+    available: true,
+    rating: 4.8,
+    jobsDone: 67,
+    years: 9,
+    bio: "Home-service motorcycle mechanic for scooters and underbones. I come to you with tools and common parts.",
+    hours: "Mon–Sat, 8:00 AM – 6:00 PM",
+    reviews: [
+      {
+        author: "Jomar T.",
+        rating: 5,
+        text: "Fixed my XRM right in front of the house.",
+        when: "1 week ago",
+      },
+      {
+        author: "Aileen V.",
+        rating: 4,
+        text: "Fair price, explained what was wrong.",
+        when: "1 month ago",
+      },
+    ],
+    portfolio: ["Scooter tune-up", "Brake pad swap", "Chain & sprocket"],
+  },
+  {
+    id: "w-rhea",
+    name: "Rhea Montemayor",
+    initials: "RM",
+    skill: "Tutoring",
+    skills: ["Math", "Science", "Reading for kids"],
+    barangayId: "matina",
+    lat: 7.0591,
+    lng: 125.5934,
+    rate: 300,
+    available: true,
+    rating: 4.9,
+    jobsDone: 112,
+    years: 4,
+    bio: "Licensed teacher offering home tutoring for Grades 1–10. Patient, structured sessions with progress notes for parents.",
+    hours: "Mon–Fri, 3:00 PM – 8:00 PM",
+    reviews: [
+      {
+        author: "Mylene F.",
+        rating: 5,
+        text: "My son's math grade went up in one quarter.",
+        when: "2 weeks ago",
+      },
+      { author: "Rodel S.", rating: 5, text: "Very patient and organized.", when: "1 month ago" },
+    ],
+    portfolio: ["Grade 6 math review", "Reading program", "Science fair coaching"],
+  },
+  {
+    id: "w-ken",
+    name: "Ken Sarmiento",
+    initials: "KS",
+    skill: "Air Conditioning Services",
+    skills: ["Aircon cleaning", "Freon recharge", "Split-type installation"],
+    barangayId: "lanang",
+    lat: 7.1012,
+    lng: 125.6342,
+    rate: 400,
+    available: false,
+    rating: 4.7,
+    jobsDone: 93,
+    years: 7,
+    bio: "Window and split-type aircon cleaning, repair, and installation for homes and small offices.",
+    hours: "Daily, 8:00 AM – 5:00 PM",
+    reviews: [
+      {
+        author: "Lyn P.",
+        rating: 5,
+        text: "Our aircon is cold again, and he cleaned up after.",
+        when: "5 days ago",
+      },
+      { author: "Caloy B.", rating: 4, text: "On time and professional.", when: "3 weeks ago" },
+    ],
+    portfolio: ["Split-type install", "Window-type cleaning", "Office aircon PMS"],
+  },
+  {
+    id: "w-pacita",
+    name: "Pacita Dagohoy",
+    initials: "PD",
+    skill: "Gardening",
+    skills: ["Lawn mowing", "Plant care", "Landscaping"],
+    barangayId: "talomo",
+    lat: 7.0438,
+    lng: 125.5761,
+    rate: 250,
+    available: true,
+    rating: 4.6,
+    jobsDone: 58,
+    years: 10,
+    bio: "Garden upkeep, trimming, and small landscaping projects. I love working with local orchids and ornamentals.",
+    hours: "Tue–Sun, 6:00 AM – 2:00 PM",
+    reviews: [
+      {
+        author: "Vilma Q.",
+        rating: 5,
+        text: "Our front yard looks amazing now.",
+        when: "2 weeks ago",
+      },
+      {
+        author: "Toto E.",
+        rating: 4,
+        text: "Hardworking and careful with plants.",
+        when: "1 month ago",
+      },
+    ],
+    portfolio: ["Front yard makeover", "Orchid corner", "Hedge trimming"],
+  },
 ];
 
 export interface Job {
@@ -444,18 +620,24 @@ export interface Job {
 export const DAVAO_DAILY_MIN_WAGE_PHP = 508;
 export const DAVAO_HOURLY_MIN_WAGE_PHP = 63.5;
 
-const CATEGORY_PRICE_MULTIPLIERS: Record<Category, number> = {
+const CATEGORY_PRICE_MULTIPLIERS: Record<string, number> = {
   Plumbing: 1.45,
   Electrical: 1.5,
   Carpentry: 1.4,
   Cleaning: 1.15,
   Painting: 1.3,
   Handyman: 1.25,
+  Gardening: 1.2,
+  "Appliance Repair": 1.45,
+  "Air Conditioning Services": 1.5,
+  Welding: 1.5,
+  "Furniture Assembly": 1.25,
+  "Moving Assistance": 1.3,
+  "Computer Repair": 1.45,
+  Tutoring: 1.3,
+  Photography: 1.45,
+  "General Labor": 1.15,
 };
-
-export function barangayById(id: string): Barangay {
-  return BARANGAYS.find((b) => b.id === id) ?? BARANGAYS[0]!;
-}
 
 /** Resolve the closest Davao barangay and human-readable label for a live or simulated GPS pin. */
 export function describeGpsLocation(
@@ -475,7 +657,7 @@ export function describeGpsLocation(
   return {
     nearestBarangayId: nearest.id,
     label: inDavaoMetro
-      ? `Live GPS · Near ${nearest.name}, Davao City`
+      ? "Live GPS · Same General Area (Davao City)"
       : `Live Device GPS (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
     inDavaoMetro,
   };
@@ -512,20 +694,68 @@ export function estimateTravelMinutes(km: number): { rideMin: number; walkMin: n
   };
 }
 
+export interface DavaoPricingBreakdown {
+  baseWageFloorPhp: number;
+  skillPremiumPhp: number;
+  toolAllowancePhp: number;
+  transportAllowancePhp: number;
+  urgencyPremiumPhp: number;
+}
+
+export interface DavaoJobPricingEstimate {
+  minimumRequiredPhp: number;
+  aiRecommendedPhp: number;
+  hourlyFloorPhp: number;
+  suggestedMinPhp: number;
+  suggestedMaxPhp: number;
+  legalBasis: string;
+  logicalBasis: string;
+  rationale: string;
+  breakdown: DavaoPricingBreakdown;
+}
+
 export function estimateDavaoJobPricing(
   category: Category,
   estimatedHours: number,
   urgent: boolean,
-): { minimumRequiredPhp: number; aiRecommendedPhp: number; hourlyFloorPhp: number } {
+): DavaoJobPricingEstimate {
   const safeHours = Math.max(1, estimatedHours);
   const minimumRequiredPhp = Math.round(safeHours * DAVAO_HOURLY_MIN_WAGE_PHP * 100) / 100;
-  const mult = CATEGORY_PRICE_MULTIPLIERS[category] * (urgent ? 1.2 : 1.0);
+  const baseMult = CATEGORY_PRICE_MULTIPLIERS[category] ?? 1.3;
+  const mult = baseMult * (urgent ? 1.2 : 1.0);
   const rawRec = minimumRequiredPhp * mult * 1.45;
   const aiRecommendedPhp = Math.max(Math.ceil(minimumRequiredPhp), Math.round(rawRec / 50) * 50);
+  const suggestedMinPhp = Math.max(minimumRequiredPhp, Math.round(aiRecommendedPhp * 0.9));
+  const suggestedMaxPhp = Math.round(aiRecommendedPhp * 1.25);
+
+  const urgencyPremiumPhp = urgent ? Math.round(aiRecommendedPhp - aiRecommendedPhp / 1.2) : 0;
+  const netMargin = Math.max(0, aiRecommendedPhp - minimumRequiredPhp - urgencyPremiumPhp);
+  const toolAllowancePhp = Math.round(netMargin * 0.35);
+  const transportAllowancePhp = Math.round(netMargin * 0.25);
+  const skillPremiumPhp = Math.max(0, netMargin - toolAllowancePhp - transportAllowancePhp);
+
+  const breakdown: DavaoPricingBreakdown = {
+    baseWageFloorPhp: minimumRequiredPhp,
+    skillPremiumPhp,
+    toolAllowancePhp,
+    transportAllowancePhp,
+    urgencyPremiumPhp,
+  };
+
+  const legalBasis = `DOLE Region XI Wage Order No. RB-XI-22 mandates ₱508.00 per 8-hour workday (₱63.50/hr). The statutory non-negotiable floor for ${safeHours}h is ₱${minimumRequiredPhp.toFixed(2)}.`;
+  const logicalBasis = `Fair market compensation calculated under Davao labor standards: base statutory floor (₱${minimumRequiredPhp.toFixed(2)}), specialized ${category} skill premium (₱${skillPremiumPhp.toFixed(2)}), worker-supplied equipment allowance (₱${toolAllowancePhp.toFixed(2)}), and intra-city travel allowance (₱${transportAllowancePhp.toFixed(2)})${urgencyPremiumPhp > 0 ? ` plus urgent dispatch surcharge (₱${urgencyPremiumPhp.toFixed(2)})` : ""}.`;
+  const rationale = `Recommended ₱${aiRecommendedPhp.toFixed(2)} ensures DOLE Region XI statutory compliance and fair trade compensation.`;
+
   return {
     minimumRequiredPhp,
     aiRecommendedPhp,
     hourlyFloorPhp: DAVAO_HOURLY_MIN_WAGE_PHP,
+    suggestedMinPhp,
+    suggestedMaxPhp,
+    legalBasis,
+    logicalBasis,
+    rationale,
+    breakdown,
   };
 }
 
@@ -792,6 +1022,43 @@ export const JOBS: Job[] = [
     description:
       "Wire-brush light rust, apply red oxide primer and charcoal enamel along 10m fence.",
   },
+  {
+    id: "j-13",
+    title: "Tune up motorcycle carburetor",
+    category: "Motorcycle Repair",
+    barangayId: "buhangin",
+    landmark: "Milan Crossing, Buhangin",
+    lat: 7.1052,
+    lng: 125.6184,
+    poster: "Jomar Tan",
+    budget: "₱700",
+    budgetNum: 700,
+    estimatedHours: 3,
+    minimumRequiredPhp: 190.5,
+    aiRecommendedPhp: 450,
+    posted: "1h ago",
+    schedule: "This week",
+    description:
+      "Honda XRM idles roughly and stalls at stoplights. Needs carburetor cleaning and tune-up.",
+  },
+  {
+    id: "j-14",
+    title: "Math tutor for Grade 8 student",
+    category: "Tutoring",
+    barangayId: "matina",
+    landmark: "Matina Pangi Road, Matina",
+    lat: 7.0588,
+    lng: 125.5921,
+    poster: "The Fernandez Family",
+    budget: "₱350 / session",
+    budgetNum: 350,
+    estimatedHours: 2,
+    minimumRequiredPhp: 127,
+    aiRecommendedPhp: 300,
+    posted: "4h ago",
+    schedule: "Weekday evenings",
+    description: "Two sessions a week to help with algebra homework and quarterly exam review.",
+  },
 ];
 
 /** Fictional demo residents who send booking requests to the user's worker profile. */
@@ -799,4 +1066,6 @@ export const DEMO_PERSONAS = [
   { name: "Maria Santos", initials: "MS" },
   { name: "Carlo Reyes", initials: "CR" },
   { name: "Ana Dimaculangan", initials: "AD" },
+  { name: "Benjie Navarro", initials: "BN" },
+  { name: "Lourdes Pido", initials: "LP" },
 ] as const;

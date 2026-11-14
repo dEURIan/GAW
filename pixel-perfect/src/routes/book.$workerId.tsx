@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, Loader2, Pencil } from "lucide-react";
 import { AppLayout } from "@/components/gaw/AppLayout";
 import { BookingForm, formatTime, type BookingDraft } from "@/components/gaw/BookingForm";
 import { Avatar, StatusBadge } from "@/components/gaw/primitives";
+import { VerificationGuardModal } from "@/components/gaw/VerificationCenter";
 import { Button } from "@/components/ui/button";
 import { barangayName, WORKERS, type Worker } from "@/lib/gaw/data";
-import { formatPeso, useGaw } from "@/lib/gaw/store";
+import { canPerformProtectedAction, formatPeso, useGaw } from "@/lib/gaw/store";
 
 export const Route = createFileRoute("/book/$workerId")({
   loader: ({ params }) => {
@@ -58,35 +59,78 @@ const STEPS: { key: Step; label: string }[] = [
 ];
 
 function BookingFlow({ worker }: { worker: Worker }) {
-  const { locationId, addBooking } = useGaw();
+  const { locationId, serviceLocation, addBooking, verification } = useGaw();
+  const draftKey = `gaw:booking-draft:${worker.id}`;
+
   const [step, setStep] = useState<Step>("form");
   const [busy, setBusy] = useState(false);
+  const [showVerifModal, setShowVerifModal] = useState(false);
   const [draft, setDraft] = useState<BookingDraft>({
     service: worker.skill,
     description: "",
     date: "",
     time: "",
     barangayId: locationId,
+    location: serviceLocation,
     budgetMode: worker.rate ? "budget" : "quote",
     budget: "",
   });
 
-  const confirm = () => {
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem(draftKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { draft?: BookingDraft; step?: Step };
+        if (parsed.draft) setDraft(parsed.draft);
+        if (parsed.step === "form" || parsed.step === "review") setStep(parsed.step);
+      }
+    } catch {
+      /* ignore session storage errors */
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (step === "done") return;
+    try {
+      window.sessionStorage.setItem(draftKey, JSON.stringify({ draft, step }));
+    } catch {
+      /* ignore session storage errors */
+    }
+  }, [draftKey, draft, step]);
+
+  const executeBookingConfirm = () => {
     setBusy(true);
     setTimeout(() => {
-      addBooking({
+      const createdId = addBooking({
         workerId: worker.id,
         service: draft.service,
         description: draft.description.trim(),
         date: draft.date,
         time: draft.time,
         barangayId: draft.barangayId,
+        location: draft.location ?? null,
         budget: draft.budgetMode === "budget" ? Number(draft.budget) : null,
       });
       setBusy(false);
-      setStep("done");
-      window.scrollTo({ top: 0 });
-    }, 700);
+      if (createdId) {
+        try {
+          window.sessionStorage.removeItem(draftKey);
+        } catch {
+          /* ignore */
+        }
+        setStep("done");
+        window.scrollTo({ top: 0 });
+      }
+    }, 450);
+  };
+
+  const confirm = () => {
+    const guard = canPerformProtectedAction(verification);
+    if (!guard.allowed) {
+      setShowVerifModal(true);
+      return;
+    }
+    executeBookingConfirm();
   };
 
   const idx = STEPS.findIndex((s) => s.key === step);
@@ -174,7 +218,7 @@ function BookingFlow({ worker }: { worker: Worker }) {
                 }),
               ],
               ["Preferred time", formatTime(draft.time)],
-              ["Service area", barangayName(draft.barangayId)],
+              ["Service area", draft.location?.label ?? barangayName(draft.barangayId)],
               [
                 "Budget",
                 draft.budgetMode === "budget"
@@ -223,11 +267,21 @@ function BookingFlow({ worker }: { worker: Worker }) {
               <Link to="/bookings">View My Bookings</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link to="/hire">Back to Home</Link>
+              <Link to="/my-jobs" search={{ tab: "pending" }}>
+                Respond in Worker My Jobs
+              </Link>
             </Button>
           </div>
         </div>
       )}
+
+      <VerificationGuardModal
+        open={showVerifModal}
+        onOpenChange={setShowVerifModal}
+        role="hire"
+        actionContext={`Confirm booking with ${worker.name} (${draft.service})`}
+        onVerifiedContinue={executeBookingConfirm}
+      />
     </div>
   );
 }

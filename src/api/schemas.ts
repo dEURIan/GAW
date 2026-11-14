@@ -19,6 +19,9 @@ export const PricingEstimateRequestSchema = z.object({
   estimatedHours: z.number().finite().positive().max(240),
   urgency: z.enum(['standard', 'urgent']).default('standard'),
   requiredSkills: z.array(z.string().trim().max(60)).max(20).default([]),
+  title: z.string().trim().max(160).optional(),
+  description: z.string().trim().max(2000).optional(),
+  barangay: z.string().trim().max(120).optional(),
 });
 
 export const CreateGigSchema = z.object({

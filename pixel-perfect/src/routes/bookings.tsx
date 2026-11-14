@@ -1,13 +1,24 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarDays,
+  CheckCircle2,
+  MapPin,
+  Play,
+  Wallet,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/gaw/AppLayout";
 import { formatTime } from "@/components/gaw/BookingForm";
+import { LiveJobSharingCard } from "@/components/gaw/GawMap";
+import { filterTabPillClass, subtleLinkClass } from "@/components/gaw/interactions";
 import { Avatar, EmptyState, StatusBadge } from "@/components/gaw/primitives";
 import { Button } from "@/components/ui/button";
+import { STATUS_LABEL, type BookingAction } from "@/lib/gaw/bookings";
 import { barangayName, WORKERS } from "@/lib/gaw/data";
-import { formatPeso, useGaw, type BookingStatus } from "@/lib/gaw/store";
+import { formatPeso, useGaw, type Booking, type BookingStatus } from "@/lib/gaw/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/bookings")({
@@ -26,41 +37,86 @@ export const Route = createFileRoute("/bookings")({
   ),
 });
 
-const FILTERS: (BookingStatus | "all")[] = ["all", "pending", "confirmed", "completed", "declined"];
+const FILTERS: { key: BookingStatus | "all"; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "confirmed", label: "Accepted" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "awaiting_confirmation", label: "Awaiting Confirmation" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+  { key: "declined", label: "Declined" },
+];
+
+function resolveWorkerDisplay(b: Booking, workerSkill?: string) {
+  const w = WORKERS.find((x) => x.id === b.workerId);
+  if (w) {
+    return {
+      id: w.id,
+      name: w.name,
+      initials: w.initials,
+      skill: w.skill,
+      isLinkable: true,
+    };
+  }
+  const fallback = WORKERS[0]!;
+  return {
+    id: fallback.id,
+    name: workerSkill ? `Assigned Worker (${workerSkill})` : `${fallback.name} (Synced Worker)`,
+    initials: "WK",
+    skill: workerSkill ?? b.service,
+    isLinkable: false,
+  };
+}
 
 function BookingsList() {
-  const { bookings, setBookingStatus } = useGaw();
+  const { bookings, bookingAction, workerProfile } = useGaw();
   const [filter, setFilter] = useState<BookingStatus | "all">("all");
+
   const list = bookings.filter((b) => filter === "all" || b.status === filter);
 
-  const act = (id: string, s: BookingStatus, msg: string) => {
-    setBookingStatus(id, s);
+  const act = (id: string, action: BookingAction, msg: string) => {
+    bookingAction(id, action);
     toast.success(msg);
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl space-y-5">
+      {/* Shared state note */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-card px-4 py-3 text-xs text-muted-foreground shadow-soft">
+        <span>
+          <strong>Shared Booking State:</strong> Status changes in Worker{" "}
+          <Link to="/my-jobs" className={cn(subtleLinkClass, "inline text-[length:inherit]")}>
+            My Jobs
+          </Link>{" "}
+          immediately update here.
+        </span>
+        <Button asChild size="sm" variant="soft">
+          <Link to="/find">+ Request New Booking</Link>
+        </Button>
+      </div>
+
+      {/* Filter pills */}
       <div
-        className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1"
+        className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1.5"
         role="group"
         aria-label="Filter by status"
       >
         {FILTERS.map((f) => {
-          const n = f === "all" ? bookings.length : bookings.filter((b) => b.status === f).length;
+          const n =
+            f.key === "all" ? bookings.length : bookings.filter((b) => b.status === f.key).length;
           return (
             <button
-              key={f}
+              key={f.key}
               type="button"
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "h-10 shrink-0 cursor-pointer rounded-full border px-4 text-sm font-semibold capitalize transition-colors",
-                filter === f
-                  ? "border-deep bg-deep text-deep-foreground"
-                  : "bg-card text-muted-foreground hover:text-foreground",
+              aria-pressed={filter === f.key}
+              onClick={() => setFilter(f.key)}
+              className={filterTabPillClass(
+                filter === f.key,
+                "h-10 shrink-0 rounded-full border px-4 text-sm font-semibold",
               )}
             >
-              {f} <span className="opacity-70">({n})</span>
+              {f.label} <span className="opacity-70">({n})</span>
             </button>
           );
         })}
@@ -69,7 +125,11 @@ function BookingsList() {
       {list.length === 0 ? (
         <EmptyState
           icon={<CalendarCheck className="size-6" />}
-          title={filter === "all" ? "No bookings yet" : `No ${filter} bookings`}
+          title={
+            filter === "all"
+              ? "No bookings yet"
+              : `No ${STATUS_LABEL[filter]?.toLowerCase() ?? filter} bookings`
+          }
           body="Find a nearby worker and send a booking request — it will show up here."
           action={
             <Button asChild>
@@ -80,8 +140,10 @@ function BookingsList() {
       ) : (
         <ul className="space-y-3">
           {list.map((b) => {
-            const w = WORKERS.find((x) => x.id === b.workerId);
-            if (!w) return null;
+            const w = resolveWorkerDisplay(b, workerProfile?.skill);
+            const rateDisplay = b.rateText ?? (b.budget ? formatPeso(b.budget) : "Quote requested");
+            const locDisplay = b.location?.label ?? barangayName(b.barangayId);
+
             return (
               <li
                 key={b.id}
@@ -92,14 +154,22 @@ function BookingsList() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <Link
-                          to="/workers/$id"
-                          params={{ id: w.id }}
-                          className="font-bold hover:underline"
-                        >
-                          {w.name}
-                        </Link>
-                        <p className="text-sm text-primary">{b.service}</p>
+                        {w.isLinkable ? (
+                          <Link
+                            to="/workers/$id"
+                            params={{ id: w.id }}
+                            className={cn(
+                              subtleLinkClass,
+                              "inline text-base font-bold text-foreground hover:text-primary",
+                            )}
+                          >
+                            {w.name}
+                          </Link>
+                        ) : (
+                          <p className="font-bold">{w.name}</p>
+                        )}
+                        <p className="text-sm font-semibold text-primary">{b.service}</p>
+                        <p className="text-xs text-muted-foreground">Employer: {b.client.name}</p>
                       </div>
                       <StatusBadge status={b.status} />
                     </div>
@@ -116,58 +186,141 @@ function BookingsList() {
                         · {formatTime(b.time)}
                       </span>
                       <span className="inline-flex items-center gap-1">
-                        <MapPin className="size-3.5" aria-hidden /> {barangayName(b.barangayId)}
+                        <MapPin className="size-3.5" aria-hidden /> {locDisplay}
                       </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Wallet className="size-3.5" aria-hidden />{" "}
-                        {b.budget ? formatPeso(b.budget) : "Quote requested"}
+                      <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                        <Wallet className="size-3.5" aria-hidden /> {rateDisplay}
                       </span>
                     </div>
                   </div>
                 </div>
 
+                {/* Optional Live Location Sharing for Active In-Progress Booking */}
+                {b.status === "in_progress" && (
+                  <LiveJobSharingCard
+                    bookingTitle={b.service}
+                    barangayId={b.barangayId}
+                    targetLocation={b.location}
+                  />
+                )}
+
+                {/* Employer Confirmation Banner when Worker marks job finished */}
+                {b.status === "awaiting_confirmation" && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-secondary/60 p-3.5">
+                    <div className="text-xs">
+                      <p className="font-bold text-foreground">
+                        Worker marked this job as finished
+                      </p>
+                      <p className="text-muted-foreground">
+                        Confirm completion to move this booking to Completed.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => act(b.id, "confirm", "Confirmed job completion!")}
+                    >
+                      <CheckCircle2 className="size-4" /> Confirm Completion
+                    </Button>
+                  </div>
+                )}
+
+                {/* Pending / Confirmed / In Progress Controls */}
                 {b.status === "pending" && (
                   <div className="mt-4 rounded-xl bg-muted p-3">
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      Demo simulation — pretend {w.name.split(" ")[0]} responded:
-                    </p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        Respond in{" "}
+                        <Link
+                          to="/my-jobs"
+                          className={cn(subtleLinkClass, "inline text-[length:inherit] underline")}
+                        >
+                          Worker My Jobs
+                        </Link>{" "}
+                        or simulate worker response:
+                      </p>
                       <Button
                         size="sm"
-                        onClick={() => act(b.id, "confirmed", `${w.name} confirmed your booking`)}
+                        variant="ghost"
+                        onClick={() => act(b.id, "cancel", "Booking cancelled")}
                       >
-                        Worker accepts
+                        <XCircle className="size-3.5" /> Cancel Booking
+                      </Button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => act(b.id, "accept", `${w.name} accepted the booking`)}
+                      >
+                        Worker Accepts
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => act(b.id, "declined", `${w.name} declined this booking`)}
+                        onClick={() => act(b.id, "decline", `${w.name} declined this booking`)}
                       >
-                        Worker declines
+                        Worker Declines
                       </Button>
                     </div>
                   </div>
                 )}
+
                 {b.status === "confirmed" && (
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      Accepted & scheduled. Worker can start the job from My Jobs.
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => act(b.id, "cancel", "Booking cancelled")}
+                      >
+                        Cancel Booking
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="soft"
+                        onClick={() => act(b.id, "start", "Worker started the job (In Progress)")}
+                      >
+                        <Play className="size-3.5" /> Simulate: Worker Starts Job
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {b.status === "in_progress" && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      Job is currently in progress.
+                    </span>
                     <Button
                       size="sm"
                       variant="soft"
-                      onClick={() => act(b.id, "completed", "Marked as completed")}
+                      onClick={() =>
+                        act(
+                          b.id,
+                          "finish",
+                          "Worker marked job finished — now awaiting your confirmation",
+                        )
+                      }
                     >
-                      Mark as completed
+                      Simulate: Worker Marks Completed
                     </Button>
                   </div>
                 )}
-                {(b.status === "completed" || b.status === "declined") && (
-                  <div className="mt-4 flex justify-end">
-                    <Button asChild size="sm" variant="outline">
-                      <Link to="/book/$workerId" params={{ workerId: w.id }}>
-                        {b.status === "completed" ? "Book again" : "Try again"}
-                      </Link>
-                    </Button>
-                  </div>
-                )}
+
+                {(b.status === "completed" ||
+                  b.status === "declined" ||
+                  b.status === "cancelled") &&
+                  w.isLinkable && (
+                    <div className="mt-4 flex justify-end">
+                      <Button asChild size="sm" variant="outline">
+                        <Link to="/book/$workerId" params={{ workerId: w.id }}>
+                          {b.status === "completed" ? "Book again" : "Try again"}
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
               </li>
             );
           })}

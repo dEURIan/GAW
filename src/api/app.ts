@@ -258,6 +258,9 @@ export function createApp(
           estimatedHours: data.estimatedHours,
           urgency: data.urgency,
           requiredSkills: data.requiredSkills,
+          title: data.title,
+          description: data.description,
+          barangay: data.barangay,
         },
         pricingProvider,
       );

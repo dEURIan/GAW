@@ -3,11 +3,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { List, Map as MapIcon, MapPinned, Search, SearchX } from "lucide-react";
 import { AppLayout } from "@/components/gaw/AppLayout";
 import { JobCard } from "@/components/gaw/cards";
+import { segmentedOptionClass } from "@/components/gaw/interactions";
 import { LiveGpsTracker } from "@/components/gaw/LiveGpsTracker";
-import { EmptyState, LocationFilter } from "@/components/gaw/primitives";
+import { EmptyState } from "@/components/gaw/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CATEGORIES, formatDistanceBadge, type Category, type Job } from "@/lib/gaw/data";
+import {
+  CATEGORIES,
+  OTHER_CATEGORY,
+  formatDistanceBadge,
+  type Category,
+  type Job,
+} from "@/lib/gaw/data";
 import { filterAndSortJobs, type JobSort } from "@/lib/gaw/filter";
 import { useGaw } from "@/lib/gaw/store";
 import { cn } from "@/lib/utils";
@@ -41,23 +48,23 @@ export const Route = createFileRoute("/jobs/")({
 function JobsList() {
   const { allJobs, applications, workerProfile, userGps } = useGaw();
   const [category, setCategory] = useState<Category | "all">("all");
-  const [area, setArea] = useState("all");
+  const [isOtherCategory, setIsOtherCategory] = useState(false);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<JobSort>("nearest");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [selectedJobId, setSelectedJobId] = useState<string | undefined>(undefined);
 
-  const applied = new Set(applications.map((a) => a.jobId));
+  const applied = new Set(applications.filter((a) => a.status !== "withdrawn").map((a) => a.jobId));
   const list = useMemo(
     () =>
       filterAndSortJobs(allJobs, {
         category,
-        barangayId: area,
+        barangayId: "all",
         query,
         sortBy,
         userGps,
       }),
-    [allJobs, category, area, query, sortBy, userGps],
+    [allJobs, category, query, sortBy, userGps],
   );
 
   const activeJobId = list.some((j) => j.id === selectedJobId) ? selectedJobId : list[0]?.id;
@@ -99,11 +106,10 @@ function JobsList() {
               type="button"
               onClick={() => setViewMode(mode)}
               aria-pressed={viewMode === mode}
-              className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors",
-                viewMode === mode
-                  ? "bg-deep text-deep-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+              className={segmentedOptionClass(
+                viewMode === mode,
+                "deep",
+                "inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold",
               )}
             >
               <Icon className="size-3.5" aria-hidden />
@@ -142,7 +148,11 @@ function JobsList() {
             className="pl-10"
           />
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <p className="rounded-2xl bg-secondary/45 px-3 py-2 text-xs text-secondary-foreground">
+          Through our live GPS tracking system, GAW connects workers and employers in the same
+          general area — jobs are ranked by real-time GPS distance from your pin.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label
               htmlFor="jobs-cat"
@@ -153,22 +163,38 @@ function JobsList() {
             <select
               id="jobs-cat"
               className="field"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as Category | "all")}
+              value={isOtherCategory ? OTHER_CATEGORY : category}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === OTHER_CATEGORY) {
+                  setIsOtherCategory(true);
+                  if (
+                    category === "all" ||
+                    CATEGORIES.includes(category as (typeof CATEGORIES)[number])
+                  ) {
+                    setCategory("");
+                  }
+                } else {
+                  setIsOtherCategory(false);
+                  setCategory(val as Category | "all");
+                }
+              }}
             >
               <option value="all">All categories</option>
               {CATEGORIES.map((c) => (
                 <option key={c}>{c}</option>
               ))}
+              <option value={OTHER_CATEGORY}>{OTHER_CATEGORY}</option>
             </select>
+            {isOtherCategory && (
+              <Input
+                value={category === "all" ? "" : category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Type custom service (e.g. Motorcycle Repair)"
+                className="mt-2"
+              />
+            )}
           </div>
-          <LocationFilter
-            id="jobs-area"
-            label="Area Filter"
-            value={area}
-            onChange={setArea}
-            includeAll
-          />
           <div className="space-y-1.5">
             <label
               htmlFor="jobs-sort"
@@ -191,7 +217,12 @@ function JobsList() {
         {workerProfile && category !== workerProfile.skill && (
           <button
             type="button"
-            onClick={() => setCategory(workerProfile.skill)}
+            onClick={() => {
+              setIsOtherCategory(
+                !CATEGORIES.includes(workerProfile.skill as (typeof CATEGORIES)[number]),
+              );
+              setCategory(workerProfile.skill);
+            }}
             className="cursor-pointer text-sm font-semibold text-primary underline-offset-4 hover:underline"
           >
             Show only {workerProfile.skill} jobs
@@ -219,13 +250,13 @@ function JobsList() {
             <EmptyState
               icon={<SearchX className="size-6" />}
               title="No jobs match"
-              body="Try another category, barangay, or move your GPS pin on the map."
+              body="Try another category or move your live GPS pin on the map to explore nearby general areas."
               action={
                 <Button
                   variant="outline"
                   onClick={() => {
+                    setIsOtherCategory(false);
                     setCategory("all");
-                    setArea("all");
                     setQuery("");
                   }}
                 >

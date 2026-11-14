@@ -5,6 +5,7 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -31,6 +32,14 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-hover-surface: var(--hover-surface);
+  --color-hover-surface-strong: var(--hover-surface-strong);
+  --color-hover-border: var(--hover-border);
+  --color-warning: var(--warning);
+  --color-warning-hover-surface: var(--warning-hover-surface);
+  --color-warning-hover-border: var(--warning-hover-border);
+  --color-danger-hover-surface: var(--danger-hover-surface);
+  --color-danger-hover-border: var(--danger-hover-border);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -94,7 +103,7 @@
 
 :root {
   --radius: 0.875rem;
-  /* Brand: #F7F9F5 background, #172B27 text, #0E7048 primary, #123C39 deep, #F4B544 gold, #61736C secondary text */
+  /* Light Mode Brand: #F7F9F5 background, #172B27 text, #0E7048 primary, #123C39 deep, #F4B544 gold, #61736C secondary text */
   --background: oklch(0.979 0.006 128.5);
   --foreground: oklch(0.271 0.027 180);
   --card: oklch(1 0 0);
@@ -109,6 +118,14 @@
   --muted-foreground: oklch(0.539 0.024 169.9);
   --accent: oklch(0.948 0.03 156);
   --accent-foreground: oklch(0.326 0.046 188.6);
+  --hover-surface: rgba(14, 112, 72, 0.09);
+  --hover-surface-strong: rgba(14, 112, 72, 0.14);
+  --hover-border: rgba(14, 112, 72, 0.3);
+  --warning: oklch(0.54 0.14 70);
+  --warning-hover-surface: rgba(217, 148, 22, 0.12);
+  --warning-hover-border: rgba(217, 148, 22, 0.32);
+  --danger-hover-surface: rgba(209, 67, 67, 0.09);
+  --danger-hover-border: rgba(209, 67, 67, 0.25);
   --destructive: oklch(0.55 0.19 27);
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(0.915 0.012 150);
@@ -147,6 +164,79 @@
   --sidebar-ring: oklch(0.483 0.106 159.2);
 }
 
+.dark {
+  /*
+   * Intentional Davao Forest Dark Mode System:
+   * App Background:       #0D1512
+   * Secondary Background: #111F19
+   * Cards & Surfaces:     #192820
+   * Elevated Surfaces:    #22352A
+   * Primary Text:         #F3F7F4
+   * Secondary Text:       #B5C8BC
+   * Borders:              #34483A
+   * Primary Action Green: #43C486
+   * Brand Forest Green:   #123C39
+   * Premium Gold:         #F4B544
+   * Error / Alert:        #F08079
+   */
+  --background: #0d1512;
+  --foreground: #f3f7f4;
+  --card: #192820;
+  --card-foreground: #f3f7f4;
+  --popover: #22352a;
+  --popover-foreground: #f3f7f4;
+  --primary: #43c486;
+  --primary-foreground: #071910;
+  --secondary: #22352a;
+  --secondary-foreground: #8ce8b8;
+  --muted: #111f19;
+  --muted-foreground: #b5c8bc;
+  --accent: #264033;
+  --accent-foreground: #ffffff;
+  --hover-surface: rgba(67, 196, 134, 0.13);
+  --hover-surface-strong: rgba(67, 196, 134, 0.2);
+  --hover-border: rgba(67, 196, 134, 0.28);
+  --warning: #f4b544;
+  --warning-hover-surface: rgba(244, 181, 68, 0.13);
+  --warning-hover-border: rgba(244, 181, 68, 0.28);
+  --danger-hover-surface: rgba(240, 128, 121, 0.14);
+  --danger-hover-border: rgba(240, 128, 121, 0.28);
+  --destructive: #f08079;
+  --destructive-foreground: #190605;
+  --border: #34483a;
+  --input: #34483a;
+  --ring: #43c486;
+  --deep: #123c39;
+  --deep-foreground: #f3f7f4;
+  --deep-muted: #b5c8bc;
+  --gold: #f4b544;
+  --gold-foreground: #1b1304;
+  --gold-soft: #1e3126;
+  --status-pending: #f7c86a;
+  --status-pending-bg: #2b2210;
+  --status-confirmed: #5ee09e;
+  --status-confirmed-bg: #132c20;
+  --status-declined: #f08079;
+  --status-declined-bg: #2e1616;
+  --status-completed: #7ec3f8;
+  --status-completed-bg: #122534;
+  --shadow-soft-value: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lift-value: 0 4px 12px rgba(0, 0, 0, 0.5), 0 22px 48px -16px rgba(0, 0, 0, 0.72);
+  --chart-1: #43c486;
+  --chart-2: #f4b544;
+  --chart-3: #123c39;
+  --chart-4: #6dd3a0;
+  --chart-5: #b5c8bc;
+  --sidebar: #111f19;
+  --sidebar-foreground: #f3f7f4;
+  --sidebar-primary: #43c486;
+  --sidebar-primary-foreground: #071910;
+  --sidebar-accent: #22352a;
+  --sidebar-accent-foreground: #f3f7f4;
+  --sidebar-border: #34483a;
+  --sidebar-ring: #43c486;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -161,11 +251,25 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
   }
 
   :focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -181,13 +285,26 @@
   font-size: 0.9375rem;
   color: var(--color-foreground);
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    background-color 0.15s ease-out;
+  &:hover:not(:disabled) {
+    border-color: var(--hover-border);
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
   &:focus-visible {
     outline: none;
     border-color: var(--color-ring);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 20%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 25%, transparent);
   }
+}
+
+.dark select.field option {
+  background-color: #192820;
+  color: #f3f7f4;
 }
 
 /* Subtle contour lines inspired by Mt. Apo terrain, for deep-green panels. */
@@ -206,10 +323,143 @@
     );
 }
 
+.dark .bg-contour {
+  border: 1px solid #2a473e;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    var(--shadow-lift-value);
+}
+
 @utility bg-gold-sheen {
   background-image: linear-gradient(
     135deg,
     var(--color-gold-soft),
     color-mix(in oklab, var(--color-gold) 35%, var(--color-card))
   );
+}
+
+.dark .bg-gold-sheen {
+  background-image: linear-gradient(135deg, #1e3126 0%, #26392c 55%, #192820 100%);
+  border: 1px solid rgba(244, 181, 68, 0.35);
+  color: #f4b544;
+}
+
+.dark .bg-gold-soft {
+  background-color: rgba(244, 181, 68, 0.12);
+  border-color: rgba(244, 181, 68, 0.28);
+  color: #f4b544;
+}
+
+/* Leaflet map container & dark-theme control styling (no distorting invert filter) */
+.leaflet-container {
+  font-family: var(--font-sans);
+  z-index: 10;
+  background-color: #e6ece8;
+}
+
+.leaflet-control-zoom a {
+  transition:
+    background-color 0.16s ease-out,
+    color 0.16s ease-out;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #edf7f1 !important;
+  color: #0e7048 !important;
+}
+
+.gaw-worker-marker button {
+  transition:
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.16s ease-out;
+}
+
+.gaw-worker-marker button:hover {
+  transform: scale(1.1);
+}
+
+.dark .leaflet-container {
+  background-color: #0d1512;
+}
+
+.dark .leaflet-control-zoom {
+  border: 1px solid #34483a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark .leaflet-control-zoom a {
+  background-color: #22352a !important;
+  color: #f3f7f4 !important;
+  border-bottom-color: #34483a !important;
+}
+
+.dark .leaflet-control-zoom a:hover {
+  background-color: #2c4436 !important;
+  color: #43c486 !important;
+}
+
+.dark .leaflet-control-attribution {
+  background-color: rgba(17, 31, 25, 0.88) !important;
+  color: #b5c8bc !important;
+  border-top: 1px solid #34483a !important;
+  border-left: 1px solid #34483a !important;
+  backdrop-filter: blur(6px);
+}
+
+.dark .leaflet-control-attribution a {
+  color: #43c486 !important;
+}
+
+.dark .leaflet-tooltip {
+  background-color: #22352a !important;
+  color: #f3f7f4 !important;
+  border: 1px solid #34483a !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55) !important;
+  border-radius: 0.625rem !important;
+  padding: 0.35rem 0.6rem !important;
+  font-weight: 600;
+}
+
+.dark .leaflet-tooltip-top:before {
+  border-top-color: #22352a !important;
+}
+
+@utility card-surface {
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-card);
+  color: var(--color-card-foreground);
+  box-shadow: var(--shadow-soft-value);
+}
+
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-link:focus-visible {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 0.875rem;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-soft-value);
 }

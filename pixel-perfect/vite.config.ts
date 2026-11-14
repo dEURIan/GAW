@@ -20,17 +20,23 @@ function gawBackendApiPlugin() {
     if (!apiHandlerPromise) {
       apiHandlerPromise = (async () => {
         const distDir = resolve(process.cwd(), "../dist");
-        const [{ createDatabase }, { GawRepository }, { seedDemoMarketplace }, { createApp }] =
-          await Promise.all([
-            import(pathToFileURL(resolve(distDir, "db/database.js")).href),
-            import(pathToFileURL(resolve(distDir, "db/repository.js")).href),
-            import(pathToFileURL(resolve(distDir, "db/seed.js")).href),
-            import(pathToFileURL(resolve(distDir, "api/app.js")).href),
-          ]);
+        const [
+          { createDatabase },
+          { GawRepository },
+          { seedDemoMarketplace },
+          { createApp },
+          { createGeminiPricingProvider },
+        ] = await Promise.all([
+          import(pathToFileURL(resolve(distDir, "db/database.js")).href),
+          import(pathToFileURL(resolve(distDir, "db/repository.js")).href),
+          import(pathToFileURL(resolve(distDir, "db/seed.js")).href),
+          import(pathToFileURL(resolve(distDir, "api/app.js")).href),
+          import(pathToFileURL(resolve(distDir, "domain/pricing-advisor.js")).href),
+        ]);
         const db = createDatabase();
         const repo = new GawRepository(db);
         seedDemoMarketplace(repo);
-        return createApp(db) as ExpressHandler;
+        return createApp(db, createGeminiPricingProvider()) as ExpressHandler;
       })();
     }
     return apiHandlerPromise;
@@ -70,6 +76,11 @@ function gawBackendApiPlugin() {
 }
 
 export default defineConfig({
+  vite: {
+    server: {
+      allowedHosts: true,
+    },
+  },
   plugins: [gawBackendApiPlugin()],
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).

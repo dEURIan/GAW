@@ -33,7 +33,7 @@ import {
   WORKERS,
 } from "@/lib/gaw/data";
 import { filterAndSortJobs, filterWorkers } from "@/lib/gaw/filter";
-import { GawProvider } from "@/lib/gaw/store";
+import { GawProvider, useGaw } from "@/lib/gaw/store";
 import {
   LiveGpsTracker,
   projectDavaoCoord,
@@ -105,7 +105,7 @@ describe("Davao GPS, Wage Policy & Fee Economics", () => {
     expect(sorted[0]?.id).toBe("j-7");
   });
 
-  it("updates live GPS pin distance when switching Davao barangays in LiveGpsTracker", () => {
+  it("displays general-area live GPS matching without fixed hub buttons in LiveGpsTracker", () => {
     const sorted = filterAndSortJobs(JOBS, {
       category: "all",
       barangayId: "all",
@@ -116,11 +116,16 @@ describe("Davao GPS, Wage Policy & Fee Economics", () => {
 
     render(
       <GawProvider>
-        <LiveGpsTracker jobs={sorted} selectedJobId={sorted[0]?.id} singleJobMode />
+        <LiveGpsTracker jobs={sorted} selectedJobId={sorted[0]?.id} />
       </GawProvider>,
     );
 
-    expect(screen.getByText(/Bajada \(J\.P\. Laurel Ave\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Live GPS · Same General Area \(Davao City\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Connecting workers and employers in the same general area in real time/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Toril$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Poblacion$/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pinpoint My GPS/i })).toBeInTheDocument();
     const demoBtn = screen.getByRole("button", { name: /Worker Walk Demo/i });
     fireEvent.click(demoBtn);
@@ -187,14 +192,11 @@ describe("Davao GPS, Wage Policy & Fee Economics", () => {
       });
       expect(screen.getByText(/7\.0644°N, 125\.6081°E/i)).toBeInTheDocument();
 
-      // Switch to Simulated Location via Barangay preset + Nudge + Route Stop
-      fireEvent.click(screen.getByRole("button", { name: /^Toril$/ }));
+      // Switch to Simulated Location via directional Nudge + Route Stop
+      fireEvent.click(screen.getByRole("button", { name: /Step North/i }));
       expect(clearWatch).toHaveBeenCalledWith(42);
       expect(screen.getByText(/Simulated Location/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/7\.0180°N, 125\.4980°E/i).length).toBeGreaterThan(0);
-
-      fireEvent.click(screen.getByRole("button", { name: /Step North/i }));
-      expect(screen.getAllByText(/7\.0202°N, 125\.4980°E/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/7\.0666°N, 125\.6081°E/i).length).toBeGreaterThan(0);
 
       fireEvent.click(screen.getByRole("button", { name: /Next Route Stop/i }));
       expect(screen.getByText(/Simulated Location/i)).toBeInTheDocument();
@@ -272,5 +274,100 @@ describe("Davao GPS, Wage Policy & Fee Economics", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Publish Davao Gig Now/i }));
     expect(onPosted).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders AI pricing breakdown and DOLE Region XI statutory basis when toggled", () => {
+    render(
+      <GawProvider>
+        <PostGigCard />
+      </GawProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Post a Gig/i }));
+    expect(screen.getByText(/DOLE Region XI Floor Compliant/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Use AI Rate/i })).toBeInTheDocument();
+
+    const toggleBtn = screen.getByRole("button", {
+      name: /Show Itemized Pricing Breakdown & Legal Basis/i,
+    });
+    expect(toggleBtn).toBeInTheDocument();
+    fireEvent.click(toggleBtn);
+
+    expect(screen.getByText(/Statutory Legal Basis \(DOLE Region XI\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/DOLE Region XI Wage Order No\. RB-XI-22/i)).toBeInTheDocument();
+    expect(screen.getByText(/Itemized Cost & Allowance Breakdown/i)).toBeInTheDocument();
+    expect(screen.getByText(/DOLE Statutory Base Floor/i)).toBeInTheDocument();
+    expect(screen.getByText(/Trade Specialization & Diagnostic Premium/i)).toBeInTheDocument();
+    expect(screen.getByText(/Worker-Supplied Tools & PPE Allowance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Davao Intra-City Transit Offset/i)).toBeInTheDocument();
+    expect(screen.getByText(/Economic & Logical Rationale/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Hide Price Breakdown & Legal Basis/i }));
+    expect(screen.queryByText(/Statutory Legal Basis \(DOLE Region XI\)/i)).not.toBeInTheDocument();
+  });
+
+  it("seeds demo employer posted gig and supports creating and removing posted gigs", () => {
+    window.localStorage.clear();
+    function Harness() {
+      const { customJobs, demoLogin, createJob, removeJob } = useGaw();
+      return (
+        <div>
+          <span data-testid="job-count">{customJobs.length}</span>
+          <ul>
+            {customJobs.map((j) => (
+              <li key={j.id}>
+                <span>{j.title}</span>
+                <button type="button" onClick={() => removeJob(j.id)}>
+                  Remove {j.id}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => demoLogin()}>
+            Demo Login
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              createJob({
+                title: "Repaint Lanang condo living room",
+                category: "Painting",
+                barangayId: "lanang",
+                landmark: "Near SM Lanang Premier",
+                estimatedHours: 4,
+                budgetNum: 900,
+                schedule: "Weekend morning",
+                description: "Two coats of semi-gloss paint on living room walls.",
+                urgent: false,
+              })
+            }
+          >
+            Create Posted Gig
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <GawProvider>
+        <Harness />
+      </GawProvider>,
+    );
+
+    expect(screen.getByTestId("job-count")).toHaveTextContent("0");
+
+    fireEvent.click(screen.getByRole("button", { name: /Demo Login/i }));
+    expect(screen.getByTestId("job-count")).toHaveTextContent("1");
+    expect(screen.getByText(/Install bathroom exhaust fan & check wiring/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Create Posted Gig/i }));
+    expect(screen.getByTestId("job-count")).toHaveTextContent("2");
+    expect(screen.getByText(/Repaint Lanang condo living room/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove j-emp-seed-1/i }));
+    expect(screen.getByTestId("job-count")).toHaveTextContent("1");
+    expect(
+      screen.queryByText(/Install bathroom exhaust fan & check wiring/i),
+    ).not.toBeInTheDocument();
   });
 });

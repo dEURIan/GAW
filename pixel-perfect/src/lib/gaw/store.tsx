@@ -17,27 +17,36 @@ import {
   syncSubscriptionTierOnApi,
 } from "./api";
 import {
-  barangayById,
+  applyAction,
+  canWithdraw,
+  type ApplicationStatus,
+  type BookingAction,
+  type BookingStatus,
+} from "./bookings";
+import {
+  BARANGAYS,
   DAVAO_GPS_ROUTE_WAYPOINTS,
   DEMO_PERSONAS,
+  JOBS,
+  WORKERS,
+  barangayById,
   describeGpsLocation,
   estimateDavaoJobPricing,
-  JOBS,
+  nearestBarangay,
   type Category,
   type Job,
 } from "./data";
+import type { LatLng } from "./geo";
+import {
+  DEFAULT_REJECTION_REASON,
+  DEFAULT_RESUBMISSION_REASON,
+  evaluateVerificationGuard,
+  type CredentialKey,
+  type VerifStatus,
+} from "./verification";
 
-export type BookingStatus = "pending" | "confirmed" | "declined" | "completed";
+export type { BookingStatus } from "./bookings";
 export type Mode = "hire" | "work";
-export type GpsSource = "gps" | "simulated" | "barangay" | "manual";
-
-export interface UserGpsState {
-  lat: number;
-  lng: number;
-  accuracyMeters: number;
-  source: GpsSource;
-  label: string;
-}
 
 export interface Account {
   name: string;
@@ -46,16 +55,39 @@ export interface Account {
   isDemo: boolean;
 }
 
+export interface Party {
+  name: string;
+  initials: string;
+}
+
+export interface PlacedLocation extends LatLng {
+  label: string;
+  source: "gps" | "pin" | "barangay";
+}
+
+/**
+ * One booking record, shared by both sides of GAW.
+ * side "hiring": the user is the employer, `workerId` is a demo worker.
+ * side "working": the user is the worker, `client` is a demo resident.
+ */
 export interface Booking {
   id: string;
+  side: "hiring" | "working";
   workerId: string;
+  client: Party;
   service: string;
   description: string;
+  /** ISO date (yyyy-mm-dd). */
   date: string;
+  /** 24h time (HH:mm). */
   time: string;
   barangayId: string;
-  /** null means the user asked the worker for a quote. */
+  location: PlacedLocation | null;
+  /** null means a quote was requested. */
   budget: number | null;
+  /** Free-text rate for jobs that came from an application. */
+  rateText?: string;
+  jobId?: string;
   status: BookingStatus;
   createdAt: number;
 }
@@ -65,30 +97,47 @@ export interface Application {
   jobId: string;
   message: string;
   rate: string;
+  status: ApplicationStatus;
   createdAt: number;
 }
 
-export interface IncomingRequest {
-  id: string;
-  persona: string;
-  initials: string;
-  service: string;
-  description: string;
-  date: string;
-  time: string;
-  barangayId: string;
-  budget: string;
-  status: BookingStatus;
-}
-
 export interface WorkerProfile {
-  skill: Category;
+  skill: string;
+  skills: string[];
   barangayId: string;
+  /** Centre of the public service area (not the live device position). */
+  area: LatLng | null;
+  radiusKm: number;
   experience: string;
   description: string;
 }
 
-export type ProPlan = "employer";
+export interface VerifDoc {
+  kind: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  isSample: boolean;
+  status: VerifStatus;
+  reason?: string | undefined;
+  submittedAt: number;
+}
+
+export interface Verification {
+  identity: VerifDoc | null;
+  credentials: Partial<Record<CredentialKey, VerifDoc>>;
+}
+
+export type ProPlan = "worker" | "employer";
+export type GpsSource = "gps" | "simulated" | "manual" | "barangay";
+
+export interface UserGpsState {
+  lat: number;
+  lng: number;
+  accuracyMeters: number;
+  source: GpsSource;
+  label: string;
+}
 
 export interface NewJobDraft {
   title: string;
@@ -107,6 +156,8 @@ export interface GawState {
   signedIn: boolean;
   mode: Mode | null;
   locationId: string;
+  /** Exact hiring location chosen with GPS or a map pin. null = use the barangay centre. */
+  serviceLocation: PlacedLocation | null;
   userGps: UserGpsState;
   workerProfile: WorkerProfile | null;
   available: boolean;
@@ -114,19 +165,20 @@ export interface GawState {
   applications: Application[];
   savedJobIds: string[];
   customJobs: Job[];
-  requests: IncomingRequest[];
   plans: ProPlan[];
+  verification: Verification;
 }
 
-const STORAGE_KEY = "gaw:demo:v2";
-const FREE_OPEN_JOBS_LIMIT = 3;
+export const STORAGE_KEY = "gaw:demo:v2";
+export const ME = "me";
+export const FREE_OPEN_JOBS_LIMIT = 3;
 
 const DEFAULT_GPS: UserGpsState = {
   lat: 7.085,
   lng: 125.61,
   accuracyMeters: 15,
   source: "barangay",
-  label: "Bajada (J.P. Laurel Ave)",
+  label: "Live GPS · Same General Area (Davao City)",
 };
 
 export const initialState: GawState = {
@@ -134,6 +186,7 @@ export const initialState: GawState = {
   signedIn: false,
   mode: null,
   locationId: "bajada",
+  serviceLocation: null,
   userGps: DEFAULT_GPS,
   workerProfile: null,
   available: true,
@@ -141,92 +194,190 @@ export const initialState: GawState = {
   applications: [],
   savedJobIds: ["j-1", "j-9"],
   customJobs: [],
-  requests: [],
   plans: [],
+  verification: { identity: null, credentials: {} },
 };
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function seedRequests(): IncomingRequest[] {
+export function isoDay(offsetDays: number, from = new Date()) {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function persona(i: number): Party {
+  const p = DEMO_PERSONAS[i % DEMO_PERSONAS.length]!;
+  return { name: p.name, initials: p.initials };
+}
+
+function seedBookings(me: Party): Booking[] {
+  const now = Date.now();
+  const base = { workerId: ME, location: null, createdAt: now } as const;
   return [
+    // Working side: requests from fictional demo residents to the user's worker profile.
     {
+      ...base,
       id: "r-1",
-      persona: DEMO_PERSONAS[0].name,
-      initials: DEMO_PERSONAS[0].initials,
+      side: "working",
+      client: persona(0),
       service: "Leaking kitchen sink",
       description: "Water drips under the sink cabinet whenever we use the faucet.",
-      date: "Tomorrow",
-      time: "9:00 AM",
+      date: isoDay(1),
+      time: "09:00",
       barangayId: "bajada",
-      budget: "₱900",
+      budget: 900,
       status: "pending",
     },
     {
+      ...base,
       id: "r-2",
-      persona: DEMO_PERSONAS[1].name,
-      initials: DEMO_PERSONAS[1].initials,
+      side: "working",
+      client: persona(1),
       service: "Install shelves in garage",
       description: "Two wall shelves for tools. I already have the brackets.",
-      date: "Saturday",
-      time: "1:00 PM",
+      date: isoDay(3),
+      time: "13:00",
       barangayId: "buhangin",
-      budget: "Request quote",
+      budget: null,
       status: "pending",
     },
     {
+      ...base,
       id: "r-3",
-      persona: DEMO_PERSONAS[2].name,
-      initials: DEMO_PERSONAS[2].initials,
+      side: "working",
+      client: persona(2),
       service: "Fix loose door hinges",
       description: "Bedroom and bathroom doors don't close properly.",
-      date: "Next Monday",
-      time: "10:00 AM",
+      date: isoDay(5),
+      time: "10:00",
       barangayId: "matina",
-      budget: "₱600",
+      budget: 600,
       status: "pending",
+    },
+    {
+      ...base,
+      id: "r-4",
+      side: "working",
+      client: persona(3),
+      service: "Replace broken window latch",
+      description: "Living room window latch snapped off; needs a replacement.",
+      date: isoDay(2),
+      time: "15:00",
+      barangayId: "poblacion",
+      budget: 500,
+      status: "confirmed",
+    },
+    {
+      ...base,
+      id: "r-5",
+      side: "working",
+      client: persona(4),
+      service: "Mount curtain rods",
+      description: "Three curtain rods in the bedrooms.",
+      date: isoDay(-9),
+      time: "10:00",
+      barangayId: "bajada",
+      budget: 750,
+      status: "completed",
+    },
+    {
+      ...base,
+      id: "r-6",
+      side: "working",
+      client: persona(1),
+      service: "Patch ceiling leak",
+      description: "Cancelled by the resident — the landlord fixed it.",
+      date: isoDay(-4),
+      time: "08:00",
+      barangayId: "buhangin",
+      budget: 1200,
+      status: "cancelled",
+    },
+    // Hiring side: bookings made by the user as an employer.
+    {
+      id: "b-confirmed-1",
+      side: "hiring",
+      workerId: "w-ramon",
+      client: me,
+      service: "Leak repair",
+      description: "Replace kitchen P-trap and check shutoff valve near Abreeza.",
+      date: isoDay(2),
+      time: "10:00",
+      barangayId: "bajada",
+      location: null,
+      budget: 850,
+      status: "confirmed",
+      createdAt: now - 1000 * 60 * 60 * 3,
+    },
+    {
+      id: "b-pending-1",
+      side: "hiring",
+      workerId: "w-dodong",
+      client: me,
+      service: "Furniture assembly",
+      description: "Assemble bedroom shelving unit and mount 2 curtain rods.",
+      date: isoDay(4),
+      time: "13:00",
+      barangayId: "poblacion",
+      location: null,
+      budget: 950,
+      status: "pending",
+      createdAt: now - 1000 * 60 * 60 * 12,
+    },
+    {
+      id: "b-seed",
+      side: "hiring",
+      workerId: "w-joy",
+      client: me,
+      service: "Cleaning",
+      description: "Deep clean before family visit.",
+      date: isoDay(-21),
+      time: "09:00",
+      barangayId: "bajada",
+      location: null,
+      budget: 1500,
+      status: "completed",
+      createdAt: now - 1000 * 60 * 60 * 24 * 21,
     },
   ];
 }
 
-function seedBookings(): Booking[] {
+function seedCustomJobs(posterName: string): Job[] {
+  const hours = 3;
+  const pricing = estimateDavaoJobPricing("Electrical", hours, false);
+  const b = barangayById("bajada");
   return [
     {
-      id: "b-confirmed-1",
-      workerId: "w-ramon",
-      service: "Leak repair",
-      description: "Replace kitchen P-trap and check shutoff valve near Abreeza.",
-      date: "2026-11-16",
-      time: "10:00",
-      barangayId: "bajada",
-      budget: 850,
-      status: "confirmed",
-      createdAt: Date.now() - 1000 * 60 * 60 * 3,
-    },
-    {
-      id: "b-pending-1",
-      workerId: "w-dodong",
-      service: "Furniture assembly",
-      description: "Assemble bedroom shelving unit and mount 2 curtain rods.",
-      date: "2026-11-18",
-      time: "13:00",
-      barangayId: "poblacion",
-      budget: 950,
-      status: "pending",
-      createdAt: Date.now() - 1000 * 60 * 60 * 12,
-    },
-    {
-      id: "b-seed",
-      workerId: "w-joy",
-      service: "Cleaning",
-      description: "Deep clean before family visit.",
-      date: "2026-10-24",
-      time: "09:00",
-      barangayId: "bajada",
-      budget: 1500,
-      status: "completed",
-      createdAt: Date.now() - 1000 * 60 * 60 * 24 * 21,
+      id: "j-emp-seed-1",
+      title: "Install bathroom exhaust fan & check wiring",
+      category: "Electrical",
+      barangayId: b.id,
+      landmark: "Near Abreeza Mall, J.P. Laurel Ave, Bajada",
+      lat: 7.0872,
+      lng: 125.6114,
+      poster: posterName,
+      budget: "₱750",
+      budgetNum: 750,
+      estimatedHours: hours,
+      minimumRequiredPhp: pricing.minimumRequiredPhp,
+      aiRecommendedPhp: pricing.aiRecommendedPhp,
+      posted: "2 hours ago",
+      schedule: "Tomorrow, 9:00 AM",
+      description:
+        "Replace an old bathroom exhaust fan, test the wall switch connection, and seal the ceiling vent cleanly.",
+      urgent: false,
     },
   ];
 }
@@ -236,13 +387,37 @@ function freshAccountState(account: Account): GawState {
     ...initialState,
     account,
     signedIn: true,
-    bookings: seedBookings(),
-    requests: seedRequests(),
+    bookings: seedBookings({
+      name: account.name,
+      initials: initialsOf(account.name),
+    }),
+    customJobs: seedCustomJobs(account.name),
     savedJobIds: ["j-1", "j-9"],
   };
 }
 
-/* ---------- Pure transitions (unit-tested) ---------- */
+/** Where distances are measured from when hiring. */
+export function hiringOrigin(s: Pick<GawState, "serviceLocation" | "locationId">): LatLng {
+  if (s.serviceLocation) return s.serviceLocation;
+  const b = BARANGAYS.find((x) => x.id === s.locationId) ?? BARANGAYS[0]!;
+  return { lat: b.lat, lng: b.lng };
+}
+
+export function hiringOriginLabel(s: Pick<GawState, "serviceLocation" | "locationId">) {
+  if (s.serviceLocation) return s.serviceLocation.label;
+  return "Live GPS · Same General Area";
+}
+
+/** Bookings the user can see as the worker (My Jobs) or as the employer (My Bookings). */
+export function bookingsFor(bookings: Booking[], side: Booking["side"]) {
+  return bookings.filter((b) => b.side === side);
+}
+
+export function hasPlan(plans: ProPlan[], p: ProPlan) {
+  return plans.includes(p);
+}
+
+/* ---------- Legacy pure transitions ---------- */
 
 export function bookingNextStatuses(status: BookingStatus): BookingStatus[] {
   if (status === "pending") return ["confirmed", "declined"];
@@ -260,6 +435,58 @@ export function updateStatus<T extends { id: string; status: BookingStatus }>(
   );
 }
 
+function normalizeLoadedState(raw: string): GawState {
+  const parsed = JSON.parse(raw) as Partial<GawState>;
+  const meParty = parsed.account
+    ? { name: parsed.account.name, initials: initialsOf(parsed.account.name) }
+    : { name: "You", initials: "ME" };
+
+  const bookings: Booking[] = Array.isArray(parsed.bookings)
+    ? parsed.bookings.map((b) => ({
+        ...b,
+        side: b.side ?? "hiring",
+        client: b.client ?? meParty,
+        location: b.location ?? null,
+      }))
+    : [];
+
+  const wp = parsed.workerProfile
+    ? {
+        ...parsed.workerProfile,
+        skills: Array.isArray(parsed.workerProfile.skills) ? parsed.workerProfile.skills : [],
+        area: parsed.workerProfile.area ?? null,
+        radiusKm:
+          typeof parsed.workerProfile.radiusKm === "number" ? parsed.workerProfile.radiusKm : 5,
+      }
+    : null;
+
+  const applications: Application[] = Array.isArray(parsed.applications)
+    ? parsed.applications.map((a) => ({
+        ...a,
+        status: a.status ?? "submitted",
+      }))
+    : [];
+
+  return {
+    ...initialState,
+    ...parsed,
+    userGps: parsed.userGps ?? DEFAULT_GPS,
+    serviceLocation: parsed.serviceLocation ?? null,
+    workerProfile: wp,
+    bookings,
+    applications,
+    savedJobIds: Array.isArray(parsed.savedJobIds) ? parsed.savedJobIds : initialState.savedJobIds,
+    customJobs: Array.isArray(parsed.customJobs) ? parsed.customJobs : [],
+    plans: Array.isArray(parsed.plans)
+      ? parsed.plans.filter((p): p is ProPlan => p === "employer")
+      : [],
+    verification: {
+      identity: parsed.verification?.identity ?? null,
+      credentials: parsed.verification?.credentials ?? {},
+    },
+  };
+}
+
 /* ---------- Context ---------- */
 
 interface GawContext extends GawState {
@@ -274,6 +501,7 @@ interface GawContext extends GawState {
   logOut: () => void;
   setMode: (m: Mode) => void;
   setLocation: (id: string) => void;
+  setServiceLocation: (l: PlacedLocation) => void;
   setUserGps: (
     lat: number,
     lng: number,
@@ -287,13 +515,35 @@ interface GawContext extends GawState {
   toggleSimulateGps: () => void;
   saveWorkerProfile: (p: WorkerProfile) => void;
   setAvailable: (v: boolean) => void;
-  addBooking: (b: Omit<Booking, "id" | "status" | "createdAt">) => string;
+  addBooking: (b: Omit<Booking, "id" | "status" | "createdAt" | "side" | "client">) => string;
+  bookingAction: (id: string, a: BookingAction) => void;
   setBookingStatus: (id: string, s: BookingStatus) => void;
-  applyToJob: (a: Omit<Application, "id" | "createdAt">) => void;
-  toggleSaveJob: (jobId: string) => { ok: boolean; saved: boolean; reason?: string };
-  createJob: (draft: NewJobDraft) => { ok: boolean; error?: string; job?: Job };
-  setRequestStatus: (id: string, s: BookingStatus) => void;
+  applyToJob: (a: Pick<Application, "jobId" | "message" | "rate">) => boolean;
+  withdrawApplication: (id: string) => void;
+  simulateHire: (applicationId: string) => string | null;
+  toggleSaveJob: (jobId: string) => {
+    ok: boolean;
+    saved: boolean;
+    reason?: string;
+  };
+  createJob: (draft: NewJobDraft) => {
+    ok: boolean;
+    error?: string;
+    job?: Job;
+  };
+  removeJob: (jobId: string) => void;
+  setPlan: (p: ProPlan, on: boolean) => void;
   togglePlan: (p: ProPlan, on: boolean) => void;
+  submitVerification: (
+    target: "identity" | CredentialKey,
+    doc: Omit<VerifDoc, "status" | "submittedAt">,
+  ) => void;
+  setVerificationStatus: (
+    target: "identity" | CredentialKey,
+    s: VerifStatus,
+    reason?: string,
+  ) => void;
+  removeVerification: (target: "identity" | CredentialKey) => void;
   resetDemo: () => void;
 }
 
@@ -335,7 +585,12 @@ export function GawProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyGpsFix = useCallback(
-    (nextGps: UserGpsState, statusMsg: string, nextLocationId?: string) => {
+    (
+      nextGps: UserGpsState,
+      statusMsg: string,
+      nextLocationId?: string,
+      syncServiceLocation?: PlacedLocation | null,
+    ) => {
       userGpsRef.current = nextGps;
       if (nextLocationId) {
         locationIdRef.current = nextLocationId;
@@ -344,6 +599,16 @@ export function GawProvider({ children }: { children: ReactNode }) {
         ...s,
         userGps: nextGps,
         ...(nextLocationId ? { locationId: nextLocationId } : {}),
+        ...(syncServiceLocation !== undefined
+          ? {
+              serviceLocation:
+                syncServiceLocation === null
+                  ? null
+                  : s.serviceLocation?.source === "pin"
+                    ? s.serviceLocation
+                    : syncServiceLocation,
+            }
+          : {}),
       }));
       setGpsStatusMessage(statusMsg);
     },
@@ -392,6 +657,12 @@ export function GawProvider({ children }: { children: ReactNode }) {
         },
         `Live GPS tracking active (±${safeAcc}m${speedText})`,
         loc.inDavaoMetro ? loc.nearestBarangayId : undefined,
+        {
+          lat: latitude,
+          lng: longitude,
+          label: loc.label,
+          source: "gps",
+        },
       );
       refreshNearbyGigs(latitude, longitude);
     };
@@ -425,17 +696,10 @@ export function GawProvider({ children }: { children: ReactNode }) {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<GawState>;
-        initialGps = parsed.userGps ?? DEFAULT_GPS;
-        initialLocId = parsed.locationId ?? initialState.locationId;
-        setState({
-          ...initialState,
-          ...parsed,
-          userGps: initialGps,
-          savedJobIds: parsed.savedJobIds ?? initialState.savedJobIds,
-          customJobs: parsed.customJobs ?? [],
-          plans: (parsed.plans ?? []).filter((p): p is ProPlan => p === "employer"),
-        });
+        const normalized = normalizeLoadedState(raw);
+        initialGps = normalized.userGps;
+        initialLocId = normalized.locationId;
+        setState(normalized);
       }
     } catch {
       /* corrupted demo data: start fresh */
@@ -499,7 +763,9 @@ export function GawProvider({ children }: { children: ReactNode }) {
     const mergedMap = new Map<string, Job>();
     for (const j of state.customJobs) mergedMap.set(j.id, j);
     for (const j of JOBS) if (!mergedMap.has(j.id)) mergedMap.set(j.id, j);
-    for (const j of backendJobs) if (!mergedMap.has(j.id)) mergedMap.set(j.id, j);
+    for (const j of backendJobs) {
+      if (!mergedMap.has(j.id)) mergedMap.set(j.id, j);
+    }
     return Array.from(mergedMap.values());
   }, [state.customJobs, backendJobs]);
 
@@ -589,6 +855,43 @@ export function GawProvider({ children }: { children: ReactNode }) {
     });
   }, [applyGpsFix, stopRealGpsWatch]);
 
+  const setServiceLocation = useCallback(
+    (l: PlacedLocation) => {
+      stopRealGpsWatch();
+      setIsSimulatingGps(false);
+      const nearest = nearestBarangay(l);
+      const nextGps: UserGpsState = {
+        lat: l.lat,
+        lng: l.lng,
+        accuracyMeters: l.source === "gps" ? 10 : 15,
+        source: l.source === "gps" ? "gps" : "manual",
+        label: l.label,
+      };
+      userGpsRef.current = nextGps;
+      locationIdRef.current = nearest.id;
+      patch((s) => ({
+        ...s,
+        serviceLocation: l,
+        locationId: nearest.id,
+        userGps: nextGps,
+      }));
+      setGpsStatusMessage(`Location updated: ${l.label}`);
+      refreshNearbyGigs(l.lat, l.lng);
+    },
+    [patch, refreshNearbyGigs, stopRealGpsWatch],
+  );
+
+  const setPlan = useCallback(
+    (p: ProPlan, on: boolean) => {
+      patch((s) => ({
+        ...s,
+        plans: on ? Array.from(new Set([...s.plans, p])) : s.plans.filter((x) => x !== p),
+      }));
+      void syncSubscriptionTierOnApi("emp-matina-resident", on ? "PRO" : "FREE");
+    },
+    [patch],
+  );
+
   const value = useMemo<GawContext>(
     () => ({
       ...state,
@@ -631,8 +934,10 @@ export function GawProvider({ children }: { children: ReactNode }) {
           },
           `Simulated pin updated (${b.lat.toFixed(4)}°N, ${b.lng.toFixed(4)}°E)`,
           locationId,
+          null,
         );
       },
+      setServiceLocation,
       setUserGps,
       nudgeUserGps,
       stepSimulatedWaypoint,
@@ -641,25 +946,95 @@ export function GawProvider({ children }: { children: ReactNode }) {
       saveWorkerProfile: (workerProfile) => patch((s) => ({ ...s, workerProfile })),
       setAvailable: (available) => patch((s) => ({ ...s, available })),
       addBooking: (b) => {
+        if (!identityVerified(state.verification)) return "";
         const id = uid("b");
-        patch((s) => ({
-          ...s,
-          bookings: [{ ...b, id, status: "pending", createdAt: Date.now() }, ...s.bookings],
-        }));
+        patch((s) => {
+          if (!identityVerified(s.verification)) return s;
+          const me = s.account
+            ? { name: s.account.name, initials: initialsOf(s.account.name) }
+            : { name: "You", initials: "ME" };
+          return {
+            ...s,
+            bookings: [
+              {
+                ...b,
+                id,
+                side: "hiring",
+                client: me,
+                status: "pending",
+                createdAt: Date.now(),
+              },
+              ...s.bookings,
+            ],
+          };
+        });
         return id;
       },
+      bookingAction: (id, a) => patch((s) => ({ ...s, bookings: applyAction(s.bookings, id, a) })),
       setBookingStatus: (id, st) =>
         patch((s) => ({ ...s, bookings: updateStatus(s.bookings, id, st) })),
       applyToJob: (a) => {
-        patch((s) =>
-          s.applications.some((x) => x.jobId === a.jobId)
-            ? s
-            : {
-                ...s,
-                applications: [{ ...a, id: uid("a"), createdAt: Date.now() }, ...s.applications],
+        if (!identityVerified(state.verification)) return false;
+        patch((s) => {
+          if (!identityVerified(s.verification)) return s;
+          const existing = s.applications.find((x) => x.jobId === a.jobId);
+          if (existing && existing.status !== "withdrawn") return s;
+          const rest = s.applications.filter((x) => x.jobId !== a.jobId);
+          return {
+            ...s,
+            applications: [
+              {
+                ...a,
+                id: uid("a"),
+                status: "submitted",
+                createdAt: Date.now(),
               },
-        );
+              ...rest,
+            ],
+          };
+        });
         void syncApplyGigOnApi(a.jobId, "w-ramon", a.message);
+        return true;
+      },
+      withdrawApplication: (id) =>
+        patch((s) => ({
+          ...s,
+          applications: s.applications.map((x) =>
+            x.id === id && canWithdraw(x.status) ? { ...x, status: "withdrawn" } : x,
+          ),
+        })),
+      simulateHire: (applicationId) => {
+        const app = state.applications.find((x) => x.id === applicationId);
+        const job = app && allJobs.find((j) => j.id === app.jobId);
+        if (!app || !job || app.status !== "submitted") return null;
+        const id = uid("r");
+        patch((s) => ({
+          ...s,
+          applications: s.applications.map((x) =>
+            x.id === applicationId ? { ...x, status: "hired" } : x,
+          ),
+          bookings: [
+            {
+              id,
+              side: "working",
+              workerId: ME,
+              client: { name: job.poster, initials: initialsOf(job.poster) },
+              service: job.title,
+              description: job.description,
+              date: isoDay(2),
+              time: "09:00",
+              barangayId: job.barangayId,
+              location: null,
+              budget: null,
+              rateText: app.rate,
+              jobId: job.id,
+              status: "confirmed",
+              createdAt: Date.now(),
+            },
+            ...s.bookings,
+          ],
+        }));
+        return id;
       },
       toggleSaveJob: (jobId) => {
         const already = state.savedJobIds.includes(jobId);
@@ -725,15 +1100,68 @@ export function GawProvider({ children }: { children: ReactNode }) {
         });
         return { ok: true, job: newJob };
       },
-      setRequestStatus: (id, st) =>
-        patch((s) => ({ ...s, requests: updateStatus(s.requests, id, st) })),
-      togglePlan: (p, on) => {
+      removeJob: (jobId) =>
         patch((s) => ({
           ...s,
-          plans: on ? Array.from(new Set([...s.plans, p])) : s.plans.filter((x) => x !== p),
-        }));
-        void syncSubscriptionTierOnApi("emp-matina-resident", on ? "PRO" : "FREE");
-      },
+          customJobs: s.customJobs.filter((j) => j.id !== jobId),
+        })),
+      setPlan,
+      togglePlan: setPlan,
+      submitVerification: (target, doc) =>
+        patch((s) => {
+          const full: VerifDoc = {
+            ...doc,
+            status: "pending",
+            reason: undefined,
+            submittedAt: Date.now(),
+          };
+          return target === "identity"
+            ? { ...s, verification: { ...s.verification, identity: full } }
+            : {
+                ...s,
+                verification: {
+                  ...s.verification,
+                  credentials: {
+                    ...s.verification.credentials,
+                    [target]: full,
+                  },
+                },
+              };
+        }),
+      setVerificationStatus: (target, st, customReason) =>
+        patch((s) => {
+          const cur =
+            target === "identity" ? s.verification.identity : s.verification.credentials[target];
+          if (!cur || cur.status !== "pending") return s;
+          const resolvedReason =
+            st === "rejected"
+              ? (customReason ?? DEFAULT_REJECTION_REASON)
+              : st === "resubmission_required"
+                ? (customReason ?? DEFAULT_RESUBMISSION_REASON)
+                : undefined;
+          const next: VerifDoc = { ...cur, status: st, reason: resolvedReason };
+          return target === "identity"
+            ? { ...s, verification: { ...s.verification, identity: next } }
+            : {
+                ...s,
+                verification: {
+                  ...s.verification,
+                  credentials: {
+                    ...s.verification.credentials,
+                    [target]: next,
+                  },
+                },
+              };
+        }),
+      removeVerification: (target) =>
+        patch((s) => {
+          if (target === "identity") {
+            return { ...s, verification: { ...s.verification, identity: null } };
+          }
+          const credentials = { ...s.verification.credentials };
+          delete credentials[target];
+          return { ...s, verification: { ...s.verification, credentials } };
+        }),
       resetDemo: () => {
         if (typeof window !== "undefined") {
           window.localStorage.removeItem(STORAGE_KEY);
@@ -755,12 +1183,14 @@ export function GawProvider({ children }: { children: ReactNode }) {
       gpsStatusMessage,
       patch,
       applyGpsFix,
+      setServiceLocation,
       setUserGps,
       nudgeUserGps,
       stepSimulatedWaypoint,
       requestBrowserGps,
       toggleSimulateGps,
       stopRealGpsWatch,
+      setPlan,
     ],
   );
 
@@ -775,4 +1205,16 @@ export function useGaw() {
 
 export function formatPeso(n: number) {
   return `₱${n.toLocaleString("en-PH")}`;
+}
+
+export function workerById(id: string) {
+  return WORKERS.find((w) => w.id === id);
+}
+
+export function identityVerified(v: Verification) {
+  return evaluateVerificationGuard(v.identity).allowed;
+}
+
+export function canPerformProtectedAction(v: Verification) {
+  return evaluateVerificationGuard(v.identity);
 }

@@ -1,60 +1,97 @@
 import {
   BARANGAYS,
+  DAVAO_CENTER,
   barangayName,
   calculateJobDistanceKm,
   estimateTravelMinutes,
-  type Category,
   type Job,
   type Worker,
 } from "./data";
+import type { LatLng } from "./geo";
+import { offersService } from "./services";
 
-/** Straight-line distance in km. Used only for SIMULATED proximity in the demo. */
-export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
+export type { LatLng };
+
+const EARTH_RADIUS_KM = 6371;
+const DEG_TO_RAD = Math.PI / 180;
+
+/** Straight-line (great-circle) distance in km. */
+export function distanceKm(a: LatLng, b: LatLng): number {
+  const dLat = (b.lat - a.lat) * DEG_TO_RAD;
+  const dLng = (b.lng - a.lng) * DEG_TO_RAD;
+  const lat1 = a.lat * DEG_TO_RAD;
+  const lat2 = b.lat * DEG_TO_RAD;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 }
 
-export function simulatedDistance(
-  worker: Worker,
-  fromBarangayId: string,
-  origin?: { lat: number; lng: number },
-) {
-  const from = origin ?? BARANGAYS.find((b) => b.id === fromBarangayId) ?? BARANGAYS[0]!;
-  return Math.round(distanceKm(from, worker) * 10) / 10;
+export function roundKm(km: number): number {
+  return Math.round(km * 10) / 10;
+}
+
+export function simulatedDistance(worker: Worker, fromBarangayId: string, origin?: LatLng): number {
+  const start = origin ?? BARANGAYS.find((b) => b.id === fromBarangayId) ?? DAVAO_CENTER;
+  return roundKm(distanceKm(start, worker));
 }
 
 export interface WorkerFilters {
-  barangayId: string;
-  origin?: { lat: number; lng: number } | undefined;
-  category: Category | "all";
+  origin?: LatLng;
+  barangayId?: string;
+  category: string | "all";
   query: string;
-  radius: number;
+  radius: number | null;
   availableOnly: boolean;
+  /** Employer Pro (demo) filter. */
+  topRatedOnly?: boolean;
 }
 
 export type WorkerWithDistance = Worker & { distance: number };
 
-export function filterWorkers(workers: Worker[], f: WorkerFilters): WorkerWithDistance[] {
+export function filterWorkers(workers: readonly Worker[], f: WorkerFilters): WorkerWithDistance[] {
+  const origin =
+    f.origin ?? BARANGAYS.find((b) => b.id === f.barangayId) ?? BARANGAYS[0] ?? DAVAO_CENTER;
   const q = f.query.trim().toLowerCase();
+
   return workers
-    .map((w) => ({ ...w, distance: simulatedDistance(w, f.barangayId, f.origin) }))
-    .filter((w) => w.distance <= f.radius)
-    .filter((w) => f.category === "all" || w.skill === f.category)
+    .map((w) => ({
+      ...w,
+      distance: roundKm(distanceKm(origin, w)),
+    }))
+    .filter((w) => (f.radius === null ? true : w.distance <= f.radius))
+    .filter((w) => f.category === "all" || offersService(w, f.category))
     .filter((w) => !f.availableOnly || w.available)
+    .filter((w) => !f.topRatedOnly || w.rating >= 4.8)
     .filter((w) => {
       if (!q) return true;
-      const hay = [w.name, w.skill, ...w.skills, barangayName(w.barangayId)]
+      const haystack = [w.name, w.skill, ...(w.skills ?? []), w.bio, barangayName(w.barangayId)]
         .join(" ")
         .toLowerCase();
-      return hay.includes(q);
+      return haystack.includes(q);
     })
-    .sort((a, b) => Number(b.available) - Number(a.available) || a.distance - b.distance);
+    .sort(
+      (a, b) =>
+        a.distance - b.distance || Number(b.available) - Number(a.available) || b.rating - a.rating,
+    );
+}
+
+export interface JobFilters {
+  category: string | "all";
+  barangayId: string | "all";
+  query: string;
+}
+
+export function filterJobs(jobs: readonly Job[], f: JobFilters): Job[] {
+  const q = f.query.trim().toLowerCase();
+
+  return jobs.filter(
+    (j) =>
+      (f.category === "all" || offersService({ skill: j.category, skills: [] }, f.category)) &&
+      (f.barangayId === "all" || j.barangayId === f.barangayId) &&
+      (!q ||
+        `${j.title} ${j.description} ${j.poster} ${j.category} ${j.landmark}`
+          .toLowerCase()
+          .includes(q)),
+  );
 }
 
 export type JobSort = "nearest" | "pay" | "urgent";
@@ -65,51 +102,38 @@ export type JobWithDistance = Job & {
   walkMin: number;
 };
 
-export interface JobFilters {
-  category: Category | "all";
-  barangayId: string | "all";
-  query: string;
+export interface JobSortFilters extends JobFilters {
+  userGps: LatLng;
+  sortBy?: JobSort;
+  maxRadiusKm?: number | null;
 }
 
-export function filterJobs(jobs: Job[], f: JobFilters): Job[] {
-  const q = f.query.trim().toLowerCase();
-  return jobs.filter(
-    (j) =>
-      (f.category === "all" || j.category === f.category) &&
-      (f.barangayId === "all" || j.barangayId === f.barangayId) &&
-      (!q || `${j.title} ${j.description} ${j.poster} ${j.landmark}`.toLowerCase().includes(q)),
-  );
-}
-
-export function filterAndSortJobs(
-  jobs: Job[],
-  f: JobFilters & {
-    sortBy?: JobSort;
-    userGps: { lat: number; lng: number };
-    maxRadiusKm?: number;
-  },
-): JobWithDistance[] {
-  const filtered = filterJobs(jobs, f)
-    .map((job): JobWithDistance => {
-      const dKm = calculateJobDistanceKm(f.userGps.lat, f.userGps.lng, job.lat, job.lng);
-      const eta = estimateTravelMinutes(dKm);
+export function filterAndSortJobs(jobs: readonly Job[], f: JobSortFilters): JobWithDistance[] {
+  const sortBy = f.sortBy ?? "nearest";
+  const mapped = filterJobs(jobs, f)
+    .map((job) => {
+      const dist = calculateJobDistanceKm(f.userGps.lat, f.userGps.lng, job.lat, job.lng);
+      const eta = estimateTravelMinutes(dist);
       return {
         ...job,
-        distanceKm: dKm,
+        distanceKm: dist,
         rideMin: eta.rideMin,
         walkMin: eta.walkMin,
       };
     })
-    .filter((job) => f.maxRadiusKm === undefined || job.distanceKm <= f.maxRadiusKm);
+    .filter((job) => (f.maxRadiusKm == null ? true : job.distanceKm <= f.maxRadiusKm));
 
-  const sortBy = f.sortBy ?? "nearest";
-  return filtered.sort((a, b) => {
+  return mapped.sort((a, b) => {
     if (sortBy === "pay") {
-      return b.budgetNum - a.budgetNum || a.distanceKm - b.distanceKm;
+      const diff = b.budgetNum - a.budgetNum;
+      return diff !== 0 ? diff : a.distanceKm - b.distanceKm;
     }
     if (sortBy === "urgent") {
-      return Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) || a.distanceKm - b.distanceKm;
+      const urg = Number(Boolean(b.urgent)) - Number(Boolean(a.urgent));
+      return urg !== 0 ? urg : a.distanceKm - b.distanceKm;
     }
-    return a.distanceKm - b.distanceKm;
+    const distDiff = a.distanceKm - b.distanceKm;
+    if (distDiff !== 0) return distDiff;
+    return Number(Boolean(b.urgent)) - Number(Boolean(a.urgent));
   });
 }
